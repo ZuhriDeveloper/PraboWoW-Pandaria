@@ -1,0 +1,126 @@
+name: build-tools-image
+
+# Image extractor data client (mapextractor, vmap4extractor, vmap4assembler,
+# mmaps_generator).
+#
+# Ada supaya ekstraksi tidak menuntut Boost 1.91 + OpenSSL 4.0.1 + CMake 4.1.2
+# + VS2022 terpasang di mesin Windows — rantai dependency yang persis kita
+# hindari dengan memakai Docker untuk server.
+#
+# Dijalankan manual: dibutuhkan sekali di awal, dan hanya perlu diulang kalau
+# extractor di core berubah.
+
+on:
+  workflow_dispatch:
+    inputs:
+      core_ref:
+        description: "Branch/tag/SHA dari Prabowow-PandaCore"
+        default: "main"
+      boost_version:
+        description: "Versi Boost pada base image"
+        default: "1.91.0"
+      openssl_version:
+        description: "Versi OpenSSL pada base image"
+        default: "4.0.0"
+
+concurrency:
+  group: tools-image
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      owner: ${{ steps.probe.outputs.owner }}
+      deps_tag: ${{ steps.probe.outputs.deps_tag }}
+      deps_exists: ${{ steps.probe.outputs.deps_exists }}
+      boost_version: ${{ steps.probe.outputs.boost_version }}
+      openssl_version: ${{ steps.probe.outputs.openssl_version }}
+    steps:
+      - id: probe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          boost="${{ inputs.boost_version }}"
+          ossl="${{ inputs.openssl_version }}"
+          deps="boost${boost}-ossl${ossl}"
+          {
+            echo "owner=$owner"
+            echo "deps_tag=$deps"
+            echo "boost_version=$boost"
+            echo "openssl_version=$ossl"
+          } >> "$GITHUB_OUTPUT"
+
+          bearer="$(printf '%s' "$GH_TOKEN" | base64 -w0)"
+          code="$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $bearer" \
+            -H "Accept: application/vnd.oci.image.index.v1+json" \
+            -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+            -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+            "https://ghcr.io/v2/${owner}/skyfire-deps/manifests/${deps}")"
+          echo "probe skyfire-deps:${deps} -> HTTP ${code}"
+          [ "$code" = "200" ] && echo "deps_exists=true" >> "$GITHUB_OUTPUT" \
+                              || echo "deps_exists=false" >> "$GITHUB_OUTPUT"
+
+  deps:
+    needs: preflight
+    if: needs.preflight.outputs.deps_exists != 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-deps-image.yml
+    with:
+      boost_version: ${{ needs.preflight.outputs.boost_version }}
+      openssl_version: ${{ needs.preflight.outputs.openssl_version }}
+
+  build:
+    needs: [preflight, deps]
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/tools.Dockerfile
+          push: true
+          build-args: |
+            DEPS_IMAGE=ghcr.io/${{ needs.preflight.outputs.owner }}/skyfire-deps:${{ needs.preflight.outputs.deps_tag }}
+            CORE_REPO=https://github.com/${{ needs.preflight.outputs.owner }}/Prabowow-PandaCore.git
+            CORE_REF=${{ inputs.core_ref }}
+          tags: |
+            ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-tools:${{ github.sha }}
+            ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-tools:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Ringkasan
+        run: |
+          {
+            echo "### Image extractor siap"
+            echo ""
+            echo "Di PC yang punya client WoW 5.4.8:"
+            echo '```bash'
+            echo "cp deploy/.env.tools.example deploy/.env.tools   # lalu isi"
+            echo "docker compose -f deploy/docker-compose.tools.yml --env-file deploy/.env.tools run --rm extract"
+            echo '```'
+            echo ""
+            echo "Tahap mmaps memakan 4-12 jam. Aman dihentikan dan dijalankan ulang."
+          } >> "$GITHUB_STEP_SUMMARY"

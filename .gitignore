@@ -1,6 +1,8 @@
 # Secrets & local overrides
 .env
-.env.local
+.env.*
+!.env.example
+!.env.tools.example
 *.local.yml
 
 # Client data (20+ GB, disinkronkan via rsync, bukan git)

@@ -45,7 +45,9 @@ MoP memakai satu koneksi.
 | `docker/entrypoint/` | Dispatch peran, render config, realmlist, unduh dump world |
 | `config/*.overrides.conf` | Hanya key yang diubah dari `.conf.dist` core — di-bake ke image |
 | `deploy/` | **Canonical** compose + `.env.example` + `mysql-init/` |
-| `tools/` | Ekstraksi data client (Windows) + unggah ke VPS |
+| `docker/tools.Dockerfile` | Image extractor data client |
+| `deploy/docker-compose.tools.yml` | Ekstraksi + unggah data client, keduanya dalam container |
+| `tools/` | Alternatif native Windows, kalau toolchain-nya sudah terpasang |
 | `docs/deployment.md` | Runbook operasional |
 
 ## Alur pertama kali
@@ -60,15 +62,21 @@ gh workflow run deploy.yml -f core_ref=main
 Push ke `main`/`master` yang menyentuh `docker/**` atau `config/**` juga
 men-trigger `deploy.yml` dengan sendirinya.
 
-```powershell
-# 3. Ekstrak data client di PC Windows — PARALEL dengan langkah 1-2.
-#    mmaps butuh 4-12 jam, ini bottleneck jadwalnya.
-.\tools\extract-client-data.ps1 -ClientPath "C:\Games\World of Warcraft 5.4.8" -ToolsPath C:\SkyFire_Files\Server\bin -OutputPath D:\wow-extracted
+```bash
+# 2. Image extractor data client (sekali). Berjalan PARALEL dengan langkah 1.
+gh workflow run build-tools-image.yml
 ```
 
 ```bash
-# 4. Unggah ~20 GB ke VPS (resumable)
-./tools/upload-client-data.sh /d/wow-extracted root@145.79.10.227
+# 3. Ekstrak data client di PC yang punya client. Tahap mmaps 4-12 jam —
+#    ini bottleneck jadwalnya, mulai sedini mungkin.
+cp deploy/.env.tools.example deploy/.env.tools    # lalu isi
+docker compose -f deploy/docker-compose.tools.yml --env-file deploy/.env.tools run --rm extract
+```
+
+```bash
+# 4. Kirim ~20 GB ke VPS langsung dari volume (resumable)
+docker compose -f deploy/docker-compose.tools.yml --env-file deploy/.env.tools run --rm upload
 ```
 
 Sisanya di VPS lewat `vps-infra` — lihat [docs/deployment.md](docs/deployment.md).

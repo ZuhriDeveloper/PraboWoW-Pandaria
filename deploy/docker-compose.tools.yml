@@ -1,0 +1,63 @@
+# ── Ekstraksi data client, dalam container ──────────────────────────────────────
+#
+# Dijalankan di PC yang punya client WoW 5.4.8, BUKAN di VPS.
+#
+#   cp deploy/.env.tools.example deploy/.env.tools   # lalu isi
+#   docker compose -f deploy/docker-compose.tools.yml --env-file deploy/.env.tools run --rm extract
+#   docker compose -f deploy/docker-compose.tools.yml --env-file deploy/.env.tools run --rm upload
+#
+# Client di-mount READ-ONLY. Output ke named volume, bukan bind mount: menulis
+# ~20 GB mmaps lewat bind mount Docker Desktop di Windows lambat sekali. Volume
+# hidup di dalam VM WSL2, dan `upload` mengirim isinya langsung ke VPS dengan
+# rsync — data tidak pernah melewati filesystem Windows.
+
+services:
+  extract:
+    image: ${GHCR_PREFIX:-ghcr.io/zuhrideveloper}/prabowow-pandaria-tools:${TOOLS_IMAGE_TAG:-latest}
+    volumes:
+      - ${CLIENT_PATH:?CLIENT_PATH wajib diisi (folder root client, yang berisi Wow.exe)}:/client:ro
+      - prabowow_extract:/out
+    environment:
+      # 0 = pakai semua core. Turunkan kalau PC ini masih dipakai kerja saat
+      # mmaps berjalan berjam-jam.
+      MMAP_THREADS: ${MMAP_THREADS:-0}
+    # Tanpa TTY tidak apa-apa; ini bukan server, prosesnya selesai sendiri.
+    stdin_open: true
+    tty: true
+
+  upload:
+    image: ${GHCR_PREFIX:-ghcr.io/zuhrideveloper}/prabowow-pandaria-tools:${TOOLS_IMAGE_TAG:-latest}
+    volumes:
+      - prabowow_extract:/out:ro
+      # Kunci SSH milik host, read-only. Di Windows biasanya
+      # C:/Users/<nama>/.ssh
+      - ${SSH_DIR:?SSH_DIR wajib diisi (folder .ssh milikmu di host)}:/root/.ssh:ro
+    entrypoint: ["/bin/bash", "-c"]
+    # accept-new: koneksi pertama ke VPS tidak menggantung menunggu jawaban
+    # interaktif, tapi host key yang BERUBAH tetap ditolak.
+    command:
+      - |
+        set -euo pipefail
+        for d in dbc maps vmaps mmaps; do
+          [ -d "/out/$$d" ] || { echo "FATAL: /out/$$d belum ada -- jalankan 'extract' dulu." >&2; exit 1; }
+        done
+        echo "Mengirim ke ${VPS_SSH}:${VPS_DATA_PATH:-/srv/prabowow/data}"
+        du -sh /out/dbc /out/maps /out/vmaps /out/mmaps
+        ssh -o StrictHostKeyChecking=accept-new "${VPS_SSH}" "mkdir -p '${VPS_DATA_PATH:-/srv/prabowow/data}'"
+        rsync -avh --progress --partial --append-verify \
+          -e "ssh -o StrictHostKeyChecking=accept-new" \
+          /out/dbc /out/maps /out/vmaps /out/mmaps \
+          "${VPS_SSH}:${VPS_DATA_PATH:-/srv/prabowow/data}/"
+        # uid/gid 1000 harus cocok dengan user `skyfire` di image server; tanpa
+        # ini mount jadi milik root dan server tidak bisa membaca satu map pun.
+        ssh -o StrictHostKeyChecking=accept-new "${VPS_SSH}" \
+          "chown -R 1000:1000 '${VPS_DATA_PATH:-/srv/prabowow/data}'"
+        echo "Selesai."
+    environment:
+      VPS_SSH: ${VPS_SSH:?VPS_SSH wajib diisi (mis. root@145.79.10.227)}
+      VPS_DATA_PATH: ${VPS_DATA_PATH:-/srv/prabowow/data}
+
+volumes:
+  # ~20-25 GB. Hapus dengan `docker volume rm prabowow_extract` setelah data
+  # aman di VPS dan sudah diverifikasi.
+  prabowow_extract:

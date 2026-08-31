@@ -249,6 +249,23 @@ grep REALM_ID apps/prabowow/.env && docker compose $PW exec db mysql -uroot -p"$
 Hampir selalu `realmlist.address` mengarah ke localhost, atau domainnya
 **di-proxy Cloudflare** (harus DNS only).
 
+### Realm bisa dipilih, lalu "Logging in to game server" tertutup seketika
+
+`realmlist.address` berisi **hostname**, bukan IPv4. Nilai kolom itu diserahkan
+apa adanya ke client sebagai alamat worldserver, dan client 5.4.8 tidak
+me-resolve hostname untuk koneksi tersebut. Tidak ada yang tercatat di log
+worldserver karena koneksinya memang tidak pernah dibuat -- `tcpdump port 8085`
+akan sunyi sementara port 3724 ramai.
+
+`configure-realm.sh` me-resolve hostname ke IPv4 sebelum menulis baris ini, jadi
+`REALM_ADDRESS` di `.env` boleh tetap domain. Kalau baris di DB terlanjur berisi
+hostname, restart `auth` sudah cukup memperbaikinya.
+
+Jangan tertukar dengan `SET realmlist` di `Config.wtf` pemain: yang itu justru
+boleh hostname, karena client sendiri yang me-resolve-nya untuk menemukan auth
+server.
+
+
 ```bash
 docker compose $PW exec db mysql -uroot -p"$DB_ROOT_PASSWORD" auth -e "SELECT address, port FROM realmlist;"
 ```

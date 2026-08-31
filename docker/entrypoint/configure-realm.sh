@@ -36,6 +36,31 @@ case "$REALM_ADDRESS" in
         ;;
 esac
 
+# Kolom realmlist.address HARUS IPv4 numerik. Nilai ini diserahkan apa adanya
+# ke client sebagai alamat worldserver, dan client 5.4.8 tidak me-resolve
+# hostname untuk koneksi itu -- ia hanya mem-parse "IP:port". Kalau di sini
+# terisi hostname, client login sukses, daftar realm muncul, lalu kotak
+# "Logging in to game server" tertutup seketika tanpa satu paket pun sampai ke
+# port world. Tidak ada yang tercatat di log server, karena koneksinya memang
+# tidak pernah terjadi.
+#
+# Ini berbeda dari `SET realmlist` di Config.wtf pemain, yang justru BOLEH
+# hostname: yang itu di-resolve client sendiri untuk menemukan auth server.
+# Karena itu .env tetap boleh diisi domain -- yang diterjemahkan di sini.
+case "$REALM_ADDRESS" in
+    *[!0-9.]*)
+        RESOLVED="$(getent ahostsv4 "$REALM_ADDRESS" 2>/dev/null | awk 'NR==1{print $1}')"
+        if [ -z "$RESOLVED" ]; then
+            echo "FATAL: '${REALM_ADDRESS}' tidak bisa di-resolve ke IPv4." >&2
+            echo "Pastikan domainnya punya record A yang menunjuk ke IP VPS," >&2
+            echo "atau isi REALM_ADDRESS langsung dengan IP-nya." >&2
+            exit 1
+        fi
+        echo "[realm] ${REALM_ADDRESS} -> ${RESOLVED}"
+        REALM_ADDRESS="$RESOLVED"
+        ;;
+esac
+
 mysql_run() { mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$@"; }
 
 echo "[realm] Menunggu ${DB_AUTH}.realmlist (maks ${WAIT_SECONDS}s)..."

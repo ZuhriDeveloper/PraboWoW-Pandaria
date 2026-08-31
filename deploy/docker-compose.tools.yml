@@ -56,6 +56,7 @@ services:
         SSHOPT="-i /tmp/ssh/key -o IdentitiesOnly=yes -o BatchMode=yes
                 -o StrictHostKeyChecking=accept-new
                 -o ServerAliveInterval=30 -o ServerAliveCountMax=10
+                -o IPQoS=throughput
                 -o ControlMaster=auto -o ControlPath=/tmp/ssh/cm
                 -o ControlPersist=30m"
         SSH="ssh $$SSHOPT"
@@ -78,19 +79,32 @@ services:
         # Urutan disengaja: dbc+maps+vmaps sudah cukup untuk server hidup dan
         # karakter bisa login. mmaps (pathfinding) menyusul; worldserver
         # menyalakannya sendiri saat folder itu terisi pada restart berikutnya.
+        #
+        # Loop-nya SADAR-KEMAJUAN, bukan sekadar menghitung percobaan: link ini
+        # memutus transfer setiap beberapa MB, jadi batas "20 percobaan" akan
+        # menyerah jauh sebelum 5,2 GB selesai. Yang membatalkan hanya kegagalan
+        # yang BERTURUT-TURUT tanpa satu byte pun bertambah di sisi VPS --
+        # selama masih ada kemajuan, ia menyambung terus dari titik terakhir.
         for folder in dbc maps vmaps mmaps; do
           echo ""
           echo "=== $$folder ==="
-          n=0
+          stall=0
+          prev=0
           until rsync -ah --info=progress2 --partial --append-verify \
+                  $${BW_LIMIT:+--bwlimit=$$BW_LIMIT} \
                   -e "$$SSH" "/out/$$folder" "$$VPS_SSH:$$VPS_DATA_PATH/"; do
-            n=$$((n+1))
-            if [ "$$n" -ge 20 ]; then
-              echo "FATAL: $$folder gagal setelah 20 percobaan." >&2
+            # Lewat koneksi yang sama -- tidak membuka TCP baru.
+            now=$$($$SSH "$$VPS_SSH" "du -sb '$$VPS_DATA_PATH/$$folder' 2>/dev/null | cut -f1" || echo 0)
+            now=$${now:-0}
+            if [ "$$now" -gt "$$prev" ]; then stall=0; else stall=$$((stall+1)); fi
+            prev=$$now
+            if [ "$$stall" -ge 6 ]; then
+              echo "FATAL: $$folder berhenti maju setelah 6 percobaan beruntun." >&2
+              echo "Coba turunkan laju: BW_LIMIT=400 di deploy/.env.tools" >&2
               exit 1
             fi
-            echo "--> putus, menyambung lagi dari titik terakhir (percobaan $$n/20)"
-            sleep 15
+            echo "--> putus di $$(numfmt --to=iec $$now 2>/dev/null || echo $$now)B; menyambung lagi"
+            sleep 10
           done
         done
 
@@ -104,6 +118,17 @@ services:
       VPS_SSH: ${VPS_SSH:?VPS_SSH wajib diisi (mis. root@145.79.10.227)}
       VPS_DATA_PATH: ${VPS_DATA_PATH:-/srv/prabowow/data}
       SSH_KEY_NAME: ${SSH_KEY_NAME:-id_ed25519}
+      BW_LIMIT: ${BW_LIMIT:-}
+
+networks:
+  # Docker Desktop memakai MTU 1500. Kalau jalur ke VPS punya MTU efektif lebih
+  # kecil (PPPoE, tunnel) DAN ICMP diblokir -- yang memang terjadi di jalur ini
+  # -- Path MTU Discovery tidak bisa memberi tahu pengirim, jadi paket besar
+  # hilang diam-diam. Sesi kecil tetap lolos, transfer besar mati. 1400 aman
+  # untuk hampir semua jalur.
+  default:
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"
 
 volumes:
   # ~20-25 GB. Hapus dengan `docker volume rm prabowow_extract` setelah data

@@ -7,7 +7,7 @@ set -eu
 HOST="${DB_HOST:-mysql}"
 PORT="${DB_PORT:-3306}"
 USER="${DB_USER:-skyfire}"
-PASS="${DB_PASS:-}"
+PASS="${DB_PASSWORD:-}"
 TIMEOUT="${DB_WAIT_TIMEOUT:-180}"
 
 echo "Menunggu MySQL di ${HOST}:${PORT} (timeout ${TIMEOUT}s)..."

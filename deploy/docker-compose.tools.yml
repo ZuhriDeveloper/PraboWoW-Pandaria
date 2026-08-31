@@ -36,7 +36,13 @@ services:
     command:
       - |
         set -euo pipefail
-        for d in dbc maps vmaps mmaps; do
+        # Urutan disengaja: yang WAJIB ada supaya worldserver mau boot lebih
+        # dulu (dbc, db2, cameras -- totalnya ~154 MB), baru geometri yang berat.
+        # db2 mudah terlewat: MoP memerlukannya di samping dbc, dan tanpa folder
+        # itu worldserver berhenti dengan "Incorrect DataDir value" yang
+        # menyesatkan ke arah konfigurasi, padahal datanya yang kurang.
+        FOLDERS="dbc db2 cameras maps vmaps mmaps"
+        for d in $$FOLDERS; do
           [ -d "/out/$$d" ] || { echo "FATAL: /out/$$d belum ada -- jalankan 'extract' dulu." >&2; exit 1; }
         done
 
@@ -73,19 +79,15 @@ services:
         trap '$$SSH -O exit "$$VPS_SSH" 2>/dev/null || true' EXIT
 
         echo "Mengirim ke $$VPS_SSH:$$VPS_DATA_PATH"
-        du -sh /out/dbc /out/maps /out/vmaps /out/mmaps
+        for d in $$FOLDERS; do du -sh "/out/$$d"; done
         $$SSH "$$VPS_SSH" "mkdir -p '$$VPS_DATA_PATH'"
 
-        # Urutan disengaja: dbc+maps+vmaps sudah cukup untuk server hidup dan
-        # karakter bisa login. mmaps (pathfinding) menyusul; worldserver
-        # menyalakannya sendiri saat folder itu terisi pada restart berikutnya.
-        #
         # Loop-nya SADAR-KEMAJUAN, bukan sekadar menghitung percobaan: link ini
         # memutus transfer setiap beberapa MB, jadi batas "20 percobaan" akan
         # menyerah jauh sebelum 5,2 GB selesai. Yang membatalkan hanya kegagalan
         # yang BERTURUT-TURUT tanpa satu byte pun bertambah di sisi VPS --
         # selama masih ada kemajuan, ia menyambung terus dari titik terakhir.
-        for folder in dbc maps vmaps mmaps; do
+        for folder in $$FOLDERS; do
           echo ""
           echo "=== $$folder ==="
           stall=0

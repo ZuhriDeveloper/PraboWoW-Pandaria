@@ -274,7 +274,7 @@ ketahuan berbulan-bulan kemudian.
 ls /srv/prabowow/data
 ```
 
-Harus ada `dbc maps vmaps mmaps`. Jalankan ulang `tools/upload-client-data.sh`.
+Harus ada `dbc db2 cameras maps vmaps mmaps`. Jalankan ulang `tools/upload-client-data.sh`.
 Kalau folder ada tapi tetap gagal, cek kepemilikannya: harus `1000:1000` supaya
 user `skyfire` di dalam container bisa membacanya.
 

@@ -1,0 +1,30 @@
+# Normalisasi baris.
+#
+# Mesin Windows di sini punya core.autocrlf=true. Tanpa aturan ini, script
+# shell di working copy jadi CRLF; kalau image pernah di-build dari Windows,
+# shebang terbaca sebagai "#!/bin/sh\r" dan container gagal start dengan
+# "no such file or directory" yang menyesatkan.
+#
+# Semua yang dieksekusi atau dibaca di dalam container Linux dipaksa LF.
+
+* text=auto eol=lf
+
+*.sh          text eol=lf
+*.conf        text eol=lf
+*.cnf         text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.sql         text eol=lf
+*.md          text eol=lf
+Dockerfile    text eol=lf
+*.Dockerfile  text eol=lf
+.env.example  text eol=lf
+
+# Script ini hanya dijalankan di Windows.
+*.ps1         text eol=crlf
+
+# Biner, jangan diutak-atik.
+*.png binary
+*.jpg binary
+*.gz  binary
+*.zip binary

@@ -1,0 +1,38 @@
+# Secrets & local overrides
+.env
+.env.local
+*.local.yml
+
+# Client data (20+ GB, disinkronkan via rsync, bukan git)
+data/
+/dbc/
+/maps/
+/vmaps/
+/mmaps/
+/Buildings/
+/Cameras/
+
+# Dump database besar (ambil dari GitHub Releases SkyFire)
+*.sql.gz
+world_database.sql
+backup/
+*.dump
+
+# Runtime
+logs/
+*.log
+*.pid
+
+# Config hasil render (dihasilkan entrypoint dari config/*.overrides.conf)
+config/generated/
+*.conf
+!*.overrides.conf
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
+
+# Override lokal sementara (mis. membuka port MySQL untuk GUI). Jangan di-commit.
+docker-compose.override.yml

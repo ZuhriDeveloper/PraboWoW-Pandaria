@@ -1,0 +1,102 @@
+name: deploy
+
+# Compile core dan push image aplikasi ke GHCR.
+#
+# Sengaja di CI, bukan di VPS: build butuh ~8-16 GB RAM dan 1-2 jam. Meng-compile
+# di VPS produksi akan membuat server yang sedang jalan kehabisan memori.
+# VPS hanya `docker compose pull`.
+#
+# Push ke GHCR TIDAK otomatis men-deploy. Stack ini manual (tanpa label
+# watchtower), sama seperti stack Cataclysm dan ragnarok — VPS baru bergerak
+# saat kamu menjalankan pull + up -d sendiri.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docker/**'
+      - 'config/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      core_ref:
+        description: "Branch/tag/SHA dari Prabowow-PandaCore yang di-build"
+        default: "main"
+      deps_tag:
+        description: "Tag image skyfire-deps yang dipakai sebagai base"
+        default: "boost1.91.0-ossl4.0.0"
+  # Dipicu dari repo core:
+  #   gh api repos/ZuhriDeveloper/PraboWoW-Pandaria/dispatches \
+  #     -f event_type=core-updated -f client_payload[ref]=<sha>
+  repository_dispatch:
+    types: [core-updated]
+
+concurrency:
+  group: deploy-${{ github.event.inputs.core_ref || github.event.client_payload.ref || 'main' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tentukan ref core dan namespace
+        id: vars
+        run: |
+          ref="${{ github.event.inputs.core_ref || github.event.client_payload.ref || 'main' }}"
+          deps="${{ github.event.inputs.deps_tag || 'boost1.91.0-ossl4.0.0' }}"
+          echo "core_ref=$ref"  >> "$GITHUB_OUTPUT"
+          echo "deps_tag=$deps" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          # Tag image memakai ref yang sudah disanitasi (slash tidak valid di tag).
+          echo "safe_ref=$(echo "$ref" | tr '/' '-')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          build-args: |
+            DEPS_IMAGE=ghcr.io/${{ steps.vars.outputs.owner }}/skyfire-deps:${{ steps.vars.outputs.deps_tag }}
+            CORE_REPO=https://github.com/${{ steps.vars.outputs.owner }}/Prabowow-PandaCore.git
+            CORE_REF=${{ steps.vars.outputs.core_ref }}
+          tags: |
+            ghcr.io/${{ steps.vars.outputs.owner }}/prabowow-pandaria-server:${{ steps.vars.outputs.safe_ref }}
+            ghcr.io/${{ steps.vars.outputs.owner }}/prabowow-pandaria-server:${{ github.sha }}
+            ghcr.io/${{ steps.vars.outputs.owner }}/prabowow-pandaria-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Ringkasan
+        run: |
+          {
+            echo "### Image siap"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Core ref | \`${{ steps.vars.outputs.core_ref }}\` |"
+            echo "| Image | \`ghcr.io/${{ steps.vars.outputs.owner }}/prabowow-pandaria-server:${{ github.sha }}\` |"
+            echo ""
+            echo "Deploy di VPS (manual, stack ini tidak auto-deploy):"
+            echo '```bash'
+            echo "cd /srv/vps-infra"
+            echo "sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=${{ github.sha }}|' apps/prabowow/.env"
+            echo "docker compose -f apps/prabowow/docker-compose.yml --env-file apps/prabowow/.env pull"
+            echo "docker compose -f apps/prabowow/docker-compose.yml --env-file apps/prabowow/.env up -d"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

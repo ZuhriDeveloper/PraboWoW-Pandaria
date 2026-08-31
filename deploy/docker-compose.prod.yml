@@ -1,0 +1,157 @@
+# ── PraboWoW Pandaria — Mists of Pandaria 5.4.8 (build 18414) ────────────────────────────
+#
+# CANONICAL. Salinan cermin ada di vps-infra/apps/prabowow/docker-compose.yml —
+# ubah di sini dulu, lalu salin ke sana bersama mysql-init/.
+#
+# MANUAL stack — sengaja TANPA label watchtower, sama seperti stack Cataclysm dan
+# ragnarok. CI tetap build & push image tiap push ke main, tapi VPS baru bergerak
+# kalau kamu bilang:
+#   docker compose -f apps/prabowow/docker-compose.yml --env-file apps/prabowow/.env pull
+#   docker compose -f apps/prabowow/docker-compose.yml --env-file apps/prabowow/.env up -d
+#
+# BUKAN HTTP. WoW bicara TCP mentah di 3724/8085, jadi Caddy tidak terlibat sama
+# sekali — ia hanya bisa reverse-proxy HTTP. Port dipublish langsung ke host dan
+# dibuka di ufw (scripts/bootstrap.sh). Kalau realm address berupa domain, record
+# DNS-nya HARUS "DNS only" — record yang di-proxy Cloudflare merusak koneksi game.
+#
+# BEDA DARI STACK CATACLYSM: tidak ada port 8086. Koneksi world kedua
+# (SendConnectToInstance / InstanceServerPort) adalah mekanisme Cataclysm; di
+# SkyFire 5.4.8 tidak ada config InstanceServerPort dan CMSG_AUTH_CONTINUED_SESSION
+# hanya stub yang mencatat error (WorldSession.cpp:692). MoP memakai satu koneksi.
+
+services:
+  db:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_USER: ${DB_USER:-skyfire}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    # sql_mode = default MySQL 8 minus NO_ZERO_DATE / NO_ZERO_IN_DATE /
+    # ONLY_FULL_GROUP_BY. Dump SkyFire berasal dari SQL era TrinityCore lama dan
+    # membawa zero-date yang ditolak MySQL 8 stock di tengah import — itu akan
+    # meninggalkan database world terisi separuh. NO_AUTO_VALUE_ON_ZERO diperlukan
+    # karena dump menyisipkan id 0 secara eksplisit. Selebihnya tetap ketat.
+    #
+    # max-allowed-packet besar: dump world memakai extended INSERT berukuran besar;
+    # dengan default 64M import putus dengan "MySQL server has gone away".
+    command: >
+      --sql-mode=STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION,NO_AUTO_VALUE_ON_ZERO
+      --character-set-server=utf8mb3
+      --collation-server=utf8mb3_general_ci
+      --innodb-buffer-pool-size=${DB_BUFFER_POOL:-2G}
+      --max-allowed-packet=256M
+      --max-connections=200
+    volumes:
+      - prabowow_db:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - prabowow-net
+    # Tanpa `ports:` — database hanya dijangkau dari network stack ini.
+    healthcheck:
+      # CMD-SHELL, bukan CMD: bentuk exec tidak punya shell, sehingga
+      # $MYSQL_ROOT_PASSWORD akan dioper apa adanya sebagai string dan probe
+      # tidak akan pernah healthy.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  auth:
+    image: ${GHCR_PREFIX}/prabowow-pandaria-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["authserver"]
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${AUTH_PORT:-3724}:3724"
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER:-skyfire}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REALM_ID: ${REALM_ID:-1}
+      REALM_NAME: ${REALM_NAME:-PraboWoW Pandaria}
+      # Alamat yang diberitahukan ke client setelah login. Saat boot pertama
+      # database auth belum tentu ada, jadi entrypoint menulis baris realmlist
+      # di background dengan retry sampai 10 menit.
+      REALM_ADDRESS: ${REALM_ADDRESS}
+      REALM_PORT: ${REALM_PORT:-8085}
+    volumes:
+      - prabowow_logs:/opt/skyfire/logs
+    healthcheck:
+      # Tanpa curl/nc yang menganggur di image; /dev/tcp milik bash sudah cukup.
+      # worldserver menunggu probe ini sehat, sehingga schema auth (dan tabel
+      # realmlist) dijamin sudah ada sebelum world start.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/3724"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    tty: true
+    stdin_open: true
+    mem_limit: ${AUTH_MEM_LIMIT:-512m}
+    networks:
+      - prabowow-net
+
+  world:
+    image: ${GHCR_PREFIX}/prabowow-pandaria-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["worldserver"]
+    depends_on:
+      db:
+        condition: service_healthy
+      # Bukan sekadar urutan: authserver-lah yang meng-install schema auth
+      # (LoginDatabase.AutoSetup). worldserver membaca realmlist saat start dan
+      # gagal kalau schema itu belum ada.
+      auth:
+        condition: service_healthy
+    ports:
+      - "${REALM_PORT:-8085}:8085"
+    environment:
+      DB_HOST: db
+      DB_USER: ${DB_USER:-skyfire}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REALM_ID: ${REALM_ID:-1}
+      REALM_NAME: ${REALM_NAME:-PraboWoW Pandaria}
+      REALM_ADDRESS: ${REALM_ADDRESS}
+      REALM_PORT: ${REALM_PORT:-8085}
+      # Dump world diunduh ke volume prabowow_worlddb saat database world masih
+      # kosong; core yang mengimpornya lalu menerapkan sql/updates/world/* di atasnya.
+      WORLD_DB_URL: ${WORLD_DB_URL}
+      RATE_XP: ${RATE_XP:-1}
+      RATE_DROP_ITEM_COMMON: ${RATE_DROP_ITEM_COMMON:-1}
+      RATE_DROP_ITEM_QUALITY: ${RATE_DROP_ITEM_QUALITY:-1}
+      RATE_DROP_ITEM_REFERENCED: ${RATE_DROP_ITEM_REFERENCED:-1}
+      RATE_DROP_MONEY: ${RATE_DROP_MONEY:-1}
+      RATE_HONOR: ${RATE_HONOR:-1}
+      RATE_REPUTATION: ${RATE_REPUTATION:-1}
+    volumes:
+      # Data turunan client: ~20-25 GB, diunggah sekali dengan
+      # tools/upload-client-data.sh, tidak pernah masuk git maupun image.
+      # Read-only — server tidak punya urusan menulis ke sini.
+      - ${DATA_PATH:-/srv/prabowow/data}:/opt/skyfire/data:ro
+      - prabowow_worlddb:/opt/skyfire/tdb
+      - prabowow_logs:/opt/skyfire/logs
+    # Kedua flag ini load-bearing, bukan kosmetik. Thread CLI worldserver membaca
+    # stdin; kalau stdin bukan console sungguhan ia menerima EOF dan mematikan
+    # proses beberapa detik setelah start — persis terlihat seperti crash.
+    # Keduanya juga yang membuat `docker attach` memberi console GM yang bisa diketik.
+    tty: true
+    stdin_open: true
+    mem_limit: ${WORLD_MEM_LIMIT:-6g}
+    # Boot pertama mengimpor dump world (10-30 menit) sebelum listener dibuka;
+    # boot berikutnya memuat mmaps/vmaps beberapa menit.
+    stop_grace_period: 120s
+    networks:
+      - prabowow-net
+
+volumes:
+  prabowow_db:        # berharga: akun dan karakter ada di sini — di-backup scripts/backup-db.sh
+  prabowow_worlddb:   # dump world, diunduh saat boot pertama; aman dihapus setelah import
+  prabowow_logs:
+
+networks:
+  prabowow-net:
+    driver: bridge

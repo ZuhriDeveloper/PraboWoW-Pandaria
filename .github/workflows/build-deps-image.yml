@@ -4,7 +4,8 @@ name: build-deps-image
 # source (tidak ada di apt Ubuntu 24.04). Build ~1 jam, tapi JARANG berubah:
 # hanya saat core menaikkan versi dependency.
 #
-# Dijalankan manual. Jangan dipasang pada `push`, karena akan membuang satu
+# Dijalankan manual, ATAU dipanggil otomatis oleh deploy.yml saat image ini
+# belum ada di GHCR. Sengaja TIDAK dipasang pada `push`: itu akan membuang satu
 # jam runner setiap kali ada perubahan kecil di repo ini.
 
 on:
@@ -15,6 +16,15 @@ on:
         default: "1.91.0"
       openssl_version:
         description: "Versi OpenSSL"
+        default: "4.0.0"
+  # Dipanggil deploy.yml sebagai reusable workflow ketika base image hilang.
+  workflow_call:
+    inputs:
+      boost_version:
+        type: string
+        default: "1.91.0"
+      openssl_version:
+        type: string
         default: "4.0.0"
 
 concurrency:

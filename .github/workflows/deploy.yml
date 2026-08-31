@@ -6,6 +6,10 @@ name: deploy
 # di VPS produksi akan membuat server yang sedang jalan kehabisan memori.
 # VPS hanya `docker compose pull`.
 #
+# Base image skyfire-deps (Boost 1.91 + OpenSSL 4.0 dari source) dibangun
+# OTOMATIS oleh job `deps` di bawah kalau belum ada di GHCR. Jadi push pertama
+# ke repo kosong tetap berhasil, hanya lebih lama (~2-3 jam sekali seumur hidup).
+#
 # Push ke GHCR TIDAK otomatis men-deploy. Stack ini manual (tanpa label
 # watchtower), sama seperti stack Cataclysm dan ragnarok — VPS baru bergerak
 # saat kamu menjalankan pull + up -d sendiri.
@@ -17,14 +21,18 @@ on:
       - 'docker/**'
       - 'config/**'
       - '.github/workflows/deploy.yml'
+      - '.github/workflows/build-deps-image.yml'
   workflow_dispatch:
     inputs:
       core_ref:
         description: "Branch/tag/SHA dari Prabowow-PandaCore yang di-build"
         default: "main"
-      deps_tag:
-        description: "Tag image skyfire-deps yang dipakai sebagai base"
-        default: "boost1.91.0-ossl4.0.0"
+      boost_version:
+        description: "Versi Boost pada base image"
+        default: "1.91.0"
+      openssl_version:
+        description: "Versi OpenSSL pada base image"
+        default: "4.0.0"
   # Dipicu dari repo core:
   #   gh api repos/ZuhriDeveloper/PraboWoW-Pandaria/dispatches \
   #     -f event_type=core-updated -f client_payload[ref]=<sha>
@@ -36,7 +44,82 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Apakah base image sudah ada? Tag-nya DITURUNKAN dari versi Boost/OpenSSL,
+  # bukan diterima sebagai string bebas — kalau tidak, permintaan tag dan tag
+  # yang dihasilkan job `deps` bisa berbeda dan kita kembali ke error
+  # "not found" yang sama.
+  preflight:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      owner: ${{ steps.probe.outputs.owner }}
+      core_ref: ${{ steps.probe.outputs.core_ref }}
+      safe_ref: ${{ steps.probe.outputs.safe_ref }}
+      deps_tag: ${{ steps.probe.outputs.deps_tag }}
+      deps_exists: ${{ steps.probe.outputs.deps_exists }}
+      boost_version: ${{ steps.probe.outputs.boost_version }}
+      openssl_version: ${{ steps.probe.outputs.openssl_version }}
+    steps:
+      - id: probe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          ref="${{ github.event.inputs.core_ref || github.event.client_payload.ref || 'main' }}"
+          boost="${{ github.event.inputs.boost_version || '1.91.0' }}"
+          ossl="${{ github.event.inputs.openssl_version || '4.0.0' }}"
+          deps="boost${boost}-ossl${ossl}"
+
+          {
+            echo "owner=$owner"
+            echo "core_ref=$ref"
+            echo "safe_ref=$(echo "$ref" | tr '/' '-')"
+            echo "deps_tag=$deps"
+            echo "boost_version=$boost"
+            echo "openssl_version=$ossl"
+          } >> "$GITHUB_OUTPUT"
+
+          # GHCR menerima GITHUB_TOKEN yang di-base64 sebagai bearer token, dan
+          # itu cukup untuk membaca paket privat milik repo ini sendiri.
+          bearer="$(printf '%s' "$GH_TOKEN" | base64 -w0)"
+          code="$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $bearer" \
+            -H "Accept: application/vnd.oci.image.index.v1+json" \
+            -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+            -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+            "https://ghcr.io/v2/${owner}/skyfire-deps/manifests/${deps}")"
+
+          echo "probe ghcr.io/${owner}/skyfire-deps:${deps} -> HTTP ${code}"
+          if [ "$code" = "200" ]; then
+            echo "deps_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Base image sudah ada; job deps dilewati." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "deps_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Base image belum ada — akan dibangun dulu (~1 jam)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ---------------------------------------------------------------------------
+  deps:
+    needs: preflight
+    if: needs.preflight.outputs.deps_exists != 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-deps-image.yml
+    with:
+      boost_version: ${{ needs.preflight.outputs.boost_version }}
+      openssl_version: ${{ needs.preflight.outputs.openssl_version }}
+
+  # ---------------------------------------------------------------------------
   build:
+    needs: [preflight, deps]
+    # `deps` di-skip saat base image sudah ada. Tanpa if ini, job yang di-skip
+    # ikut men-skip job yang bergantung padanya.
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     permissions:
@@ -45,17 +128,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Tentukan ref core dan namespace
-        id: vars
-        run: |
-          ref="${{ github.event.inputs.core_ref || github.event.client_payload.ref || 'main' }}"
-          deps="${{ github.event.inputs.deps_tag || 'boost1.91.0-ossl4.0.0' }}"
-          echo "core_ref=$ref"  >> "$GITHUB_OUTPUT"
-          echo "deps_tag=$deps" >> "$GITHUB_OUTPUT"
-          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
-          # Tag image memakai ref yang sudah disanitasi (slash tidak valid di tag).
-          echo "safe_ref=$(echo "$ref" | tr '/' '-')" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -72,13 +144,13 @@ jobs:
           file: docker/Dockerfile
           push: true
           build-args: |
-            DEPS_IMAGE=ghcr.io/${{ steps.vars.outputs.owner }}/skyfire-deps:${{ steps.vars.outputs.deps_tag }}
-            CORE_REPO=https://github.com/${{ steps.vars.outputs.owner }}/Prabowow-PandaCore.git
-            CORE_REF=${{ steps.vars.outputs.core_ref }}
+            DEPS_IMAGE=ghcr.io/${{ needs.preflight.outputs.owner }}/skyfire-deps:${{ needs.preflight.outputs.deps_tag }}
+            CORE_REPO=https://github.com/${{ needs.preflight.outputs.owner }}/Prabowow-PandaCore.git
+            CORE_REF=${{ needs.preflight.outputs.core_ref }}
           tags: |
-            ghcr.io/${{ steps.vars.outputs.owner }}/prabowow-pandaria-server:${{ steps.vars.outputs.safe_ref }}
-            ghcr.io/${{ steps.vars.outputs.owner }}/prabowow-pandaria-server:${{ github.sha }}
-            ghcr.io/${{ steps.vars.outputs.owner }}/prabowow-pandaria-server:latest
+            ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-server:${{ needs.preflight.outputs.safe_ref }}
+            ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-server:${{ github.sha }}
+            ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-server:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -89,8 +161,9 @@ jobs:
             echo ""
             echo "| | |"
             echo "|---|---|"
-            echo "| Core ref | \`${{ steps.vars.outputs.core_ref }}\` |"
-            echo "| Image | \`ghcr.io/${{ steps.vars.outputs.owner }}/prabowow-pandaria-server:${{ github.sha }}\` |"
+            echo "| Core ref | \`${{ needs.preflight.outputs.core_ref }}\` |"
+            echo "| Base image | \`skyfire-deps:${{ needs.preflight.outputs.deps_tag }}\` |"
+            echo "| Image | \`ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-server:${{ github.sha }}\` |"
             echo ""
             echo "Deploy di VPS (manual, stack ini tidak auto-deploy):"
             echo '```bash'

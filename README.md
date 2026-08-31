@@ -51,12 +51,14 @@ MoP memakai satu koneksi.
 ## Alur pertama kali
 
 ```bash
-# 1. Base image dependency (sekali, ~1 jam, jarang diulang)
-gh workflow run build-deps-image.yml
-
-# 2. Image aplikasi
+# 1. Image aplikasi. Base image dependency (Boost 1.91 + OpenSSL 4.0 dari
+#    source) dibangun OTOMATIS oleh job `deps` kalau belum ada di GHCR, jadi
+#    run pertama memakan ~2-3 jam dan run berikutnya ~1 jam.
 gh workflow run deploy.yml -f core_ref=main
 ```
+
+Push ke `main`/`master` yang menyentuh `docker/**` atau `config/**` juga
+men-trigger `deploy.yml` dengan sendirinya.
 
 ```powershell
 # 3. Ekstrak data client di PC Windows — PARALEL dengan langkah 1-2.

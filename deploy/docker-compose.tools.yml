@@ -33,29 +33,77 @@ services:
       # C:/Users/<nama>/.ssh
       - ${SSH_DIR:?SSH_DIR wajib diisi (folder .ssh milikmu di host)}:/root/.ssh:ro
     entrypoint: ["/bin/bash", "-c"]
-    # accept-new: koneksi pertama ke VPS tidak menggantung menunggu jawaban
-    # interaktif, tapi host key yang BERUBAH tetap ditolak.
     command:
       - |
         set -euo pipefail
         for d in dbc maps vmaps mmaps; do
           [ -d "/out/$$d" ] || { echo "FATAL: /out/$$d belum ada -- jalankan 'extract' dulu." >&2; exit 1; }
         done
-        echo "Mengirim ke ${VPS_SSH}:${VPS_DATA_PATH:-/srv/prabowow/data}"
+
+        # Bind mount dari Windows SELALU tampil 0777, dan OpenSSH menolak private
+        # key seluas itu ("bad permissions") lalu diam-diam jatuh ke prompt
+        # password. Salin ke dalam container lalu set 600.
+        KEY_SRC="/root/.ssh/$${SSH_KEY_NAME}"
+        [ -f "$$KEY_SRC" ] || { echo "FATAL: private key tidak ada di $$KEY_SRC." >&2; exit 1; }
+        install -d -m 700 /tmp/ssh
+        install -m 600 "$$KEY_SRC" /tmp/ssh/key
+
+        # ControlMaster: SELURUH upload memakai SATU koneksi TCP. Tanpa ini
+        # service membuka koneksi terpisah untuk test/mkdir/rsync/chown, dan
+        # VPS ini me-rate-limit port 22 -- koneksi ke-3 dan seterusnya ditolak
+        # atau di-reset di tengah transfer. Gejalanya menyamar jadi "Broken
+        # pipe" / "Connection timed out", seolah-olah jaringan yang buruk.
+        SSHOPT="-i /tmp/ssh/key -o IdentitiesOnly=yes -o BatchMode=yes
+                -o StrictHostKeyChecking=accept-new
+                -o ServerAliveInterval=30 -o ServerAliveCountMax=10
+                -o ControlMaster=auto -o ControlPath=/tmp/ssh/cm
+                -o ControlPersist=30m"
+        SSH="ssh $$SSHOPT"
+
+        echo "--> membuka satu koneksi SSH untuk seluruh sesi"
+        if ! $$SSH -N -f "$$VPS_SSH" 2>/tmp/ssh/err; then
+          echo "FATAL: tidak bisa membuka koneksi SSH ke $$VPS_SSH" >&2
+          cat /tmp/ssh/err >&2
+          echo "Kalau ini 'Connection refused/reset', port 22 sedang kena rate" >&2
+          echo "limit. Tunggu ~10 menit lalu ulangi -- jangan mencoba berulang," >&2
+          echo "tiap percobaan memperpanjang blokirnya." >&2
+          exit 1
+        fi
+        trap '$$SSH -O exit "$$VPS_SSH" 2>/dev/null || true' EXIT
+
+        echo "Mengirim ke $$VPS_SSH:$$VPS_DATA_PATH"
         du -sh /out/dbc /out/maps /out/vmaps /out/mmaps
-        ssh -o StrictHostKeyChecking=accept-new "${VPS_SSH}" "mkdir -p '${VPS_DATA_PATH:-/srv/prabowow/data}'"
-        rsync -avh --progress --partial --append-verify \
-          -e "ssh -o StrictHostKeyChecking=accept-new" \
-          /out/dbc /out/maps /out/vmaps /out/mmaps \
-          "${VPS_SSH}:${VPS_DATA_PATH:-/srv/prabowow/data}/"
+        $$SSH "$$VPS_SSH" "mkdir -p '$$VPS_DATA_PATH'"
+
+        # Urutan disengaja: dbc+maps+vmaps sudah cukup untuk server hidup dan
+        # karakter bisa login. mmaps (pathfinding) menyusul; worldserver
+        # menyalakannya sendiri saat folder itu terisi pada restart berikutnya.
+        for folder in dbc maps vmaps mmaps; do
+          echo ""
+          echo "=== $$folder ==="
+          n=0
+          until rsync -ah --info=progress2 --partial --append-verify \
+                  -e "$$SSH" "/out/$$folder" "$$VPS_SSH:$$VPS_DATA_PATH/"; do
+            n=$$((n+1))
+            if [ "$$n" -ge 20 ]; then
+              echo "FATAL: $$folder gagal setelah 20 percobaan." >&2
+              exit 1
+            fi
+            echo "--> putus, menyambung lagi dari titik terakhir (percobaan $$n/20)"
+            sleep 15
+          done
+        done
+
         # uid/gid 1000 harus cocok dengan user `skyfire` di image server; tanpa
         # ini mount jadi milik root dan server tidak bisa membaca satu map pun.
-        ssh -o StrictHostKeyChecking=accept-new "${VPS_SSH}" \
-          "chown -R 1000:1000 '${VPS_DATA_PATH:-/srv/prabowow/data}'"
+        $$SSH "$$VPS_SSH" "chown -R 1000:1000 '$$VPS_DATA_PATH'"
+        echo ""
+        $$SSH "$$VPS_SSH" "du -sh '$$VPS_DATA_PATH'/*"
         echo "Selesai."
     environment:
       VPS_SSH: ${VPS_SSH:?VPS_SSH wajib diisi (mis. root@145.79.10.227)}
       VPS_DATA_PATH: ${VPS_DATA_PATH:-/srv/prabowow/data}
+      SSH_KEY_NAME: ${SSH_KEY_NAME:-id_ed25519}
 
 volumes:
   # ~20-25 GB. Hapus dengan `docker volume rm prabowow_extract` setelah data

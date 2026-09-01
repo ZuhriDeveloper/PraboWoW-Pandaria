@@ -183,6 +183,27 @@ sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=<sha>|' apps/prabowow/.env && docker compose $
 `sql/updates/*` yang baru ikut di dalam image dan otomatis diterapkan saat
 startup oleh `DatabaseSetup`. Tidak ada langkah SQL manual.
 
+Tag image memakai SHA **repo ini**, bukan SHA core. Untuk memastikan patch core
+yang dimaksud benar-benar ada di image yang sedang jalan:
+
+```bash
+docker compose $PW exec world cat /opt/skyfire/.core-revision
+```
+
+Dan update SQL mana saja yang sudah masuk:
+
+```bash
+docker compose $PW exec db mysql -uroot -p"$DB_ROOT_PASSWORD" world -e "SELECT filename, applied_at FROM skyfire_db_updates ORDER BY applied_at DESC LIMIT 10;"
+```
+
+File update yang **dihapus** di core aman: barisnya tertinggal di
+`skyfire_db_updates` dan diabaikan, karena rencana update disusun dari file
+yang ada di disk. Yang berbahaya adalah file yang sudah diterapkan lalu
+**diubah isinya** -- hash-nya tidak cocok lagi dan core berhenti dengan
+"already applied with a different hash" (`AllowUpdateHashMismatch = 0`,
+DatabaseSetup.cpp:625-636). Perbaikannya di repo core: terbitkan file update
+baru, jangan sunting yang lama.
+
 Backup dulu kalau update menyentuh `sql/updates/characters/`:
 
 ```bash

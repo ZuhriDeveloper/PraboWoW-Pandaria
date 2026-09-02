@@ -125,7 +125,7 @@ ENV DB_HOST=db \
     RATE_DROP_MONEY=1 \
     RATE_HONOR=1 \
     RATE_REPUTATION=1 \
-    HEIRLOOM_PRICE_GOLD=500
+    HEIRLOOM_PRICE_GOLD=0
 
 # Smoke test saat build: legacy provider harus aktif (SRP6/GRUNT butuh ini)
 # dan kedua binary harus ter-resolve penuh oleh dynamic linker.

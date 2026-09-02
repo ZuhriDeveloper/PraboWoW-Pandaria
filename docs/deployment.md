@@ -186,6 +186,12 @@ startup oleh `DatabaseSetup`. Tidak ada langkah SQL manual.
 Tag image memakai SHA **repo ini**, bukan SHA core. Untuk memastikan patch core
 yang dimaksud benar-benar ada di image yang sedang jalan:
 
+Commit core yang dipakai build itu juga dicetak di ringkasan workflow, baris
+**Core commit**. `deploy.yml` selalu meresolve `core_ref` jadi SHA lebih dulu,
+karena layer `git fetch` di Dockerfile di-cache BuildKit berdasarkan teks
+perintahnya — dengan `core_ref=main` teks itu tidak pernah berubah dan build
+bisa diam-diam memakai core lama dari cache.
+
 ```bash
 docker compose $PW exec world cat /opt/skyfire/.core-revision
 ```

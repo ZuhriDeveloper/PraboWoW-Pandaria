@@ -132,6 +132,8 @@ services:
       RATE_DROP_MONEY: ${RATE_DROP_MONEY:-1}
       RATE_HONOR: ${RATE_HONOR:-1}
       RATE_REPUTATION: ${RATE_REPUTATION:-1}
+      # Harga tiap heirloom di vendor mod-prabowow, dalam gold. 0 = harga DB2 (kebanyakan gratis).
+      HEIRLOOM_PRICE_GOLD: ${HEIRLOOM_PRICE_GOLD:-500}
     volumes:
       # Data turunan client: ~20-25 GB, diunggah sekali dengan
       # tools/upload-client-data.sh, tidak pernah masuk git maupun image.

@@ -107,6 +107,24 @@ restart**. Itulah mekanisme upgrade DB — tidak ada langkah SQL manual.
 SQL khusus server ini juga ditulis sebagai `sql/updates/<db>/` **di repo core**,
 bukan di sini, supaya ikut dilacak dan diverifikasi hash-nya.
 
+## Fitur pemain (mod-prabowow)
+
+Semua fitur di bawah hidup di modul `modules/mod-prabowow` repo core dan
+dinyalakan lewat key `PraboWoW.*` di `config/worldserver.overrides.conf`.
+
+| Fitur | Cara pakai |
+|---|---|
+| Rate XP per karakter | `.xp` lihat rate, `.xp rate <1-5>` ganti. Dikalikan di atas `RATE_XP`. |
+| Chat satu realm | `.chat <pesan>` -- sampai ke semua pemain, kedua faksi. Cooldown 3 detik, hormati mute. |
+| Auto-jual item abu-abu | Otomatis saat loot; uangnya langsung masuk. |
+| Semua flight path | Dikenal saat login, sesuai faksi. |
+| Vendor heirloom | NPC "Heirloom Vendor" berdiri di tiap titik spawn karakter baru; harga `HEIRLOOM_PRICE_GOLD` (default 500g). |
+| Surat karakter baru | Item 23162 (tas 36 slot) x1 lewat mailbox. |
+
+Command pemain butuh RBAC permission 1100-1102 (auth) dan tabel
+`character_xp_rate` (characters); keduanya `sql/updates/*` di repo core dan
+diterapkan otomatis saat world start.
+
 ## Catatan yang mahal kalau terlewat
 
 - **`REALM_ADDRESS` harus IP publik/hostname VPS.** Kalau `127.0.0.1`, pemain

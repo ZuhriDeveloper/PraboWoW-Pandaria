@@ -57,6 +57,7 @@ jobs:
     outputs:
       owner: ${{ steps.probe.outputs.owner }}
       core_ref: ${{ steps.probe.outputs.core_ref }}
+      core_sha: ${{ steps.probe.outputs.core_sha }}
       safe_ref: ${{ steps.probe.outputs.safe_ref }}
       deps_tag: ${{ steps.probe.outputs.deps_tag }}
       deps_exists: ${{ steps.probe.outputs.deps_exists }}
@@ -73,10 +74,38 @@ jobs:
           boost="${{ github.event.inputs.boost_version || '1.91.0' }}"
           ossl="${{ github.event.inputs.openssl_version || '4.0.0' }}"
           deps="boost${boost}-ossl${ossl}"
+          core_repo="https://github.com/${owner}/Prabowow-PandaCore.git"
+
+          # core_ref WAJIB diresolve jadi SHA sebelum dipakai sebagai build-arg.
+          # `git fetch --depth 1 origin "${CORE_REF}"` di Dockerfile adalah satu
+          # baris RUN, dan BuildKit meng-cache layer itu berdasarkan TEKS
+          # perintahnya, bukan isi commit yang ditunjuk ref. Dengan CORE_REF=main
+          # teksnya tidak pernah berubah walau main sudah maju, jadi layer lama
+          # dipakai ulang dan image diam-diam berisi core versi lama. Ini benar-
+          # benar terjadi 2026-09-02: dua build "sukses" selesai 25 detik dengan
+          # langkah git fetch berstatus CACHED, membawa core sebelum promosi SQL.
+          # SHA membuat teks perintahnya berubah tiap commit, sehingga cache hanya
+          # kena untuk commit yang memang sama.
+          if printf '%s' "$ref" | grep -qiE '^[0-9a-f]{40}$'; then
+            sha="$(printf '%s' "$ref" | tr '[:upper:]' '[:lower:]')"
+          else
+            refs="$(git ls-remote "$core_repo" "$ref" || true)"
+            # Tag beranotasi memberi dua baris; yang berakhiran ^{} adalah commit.
+            sha="$(printf '%s\n' "$refs" | awk '$2 ~ /\^\{\}$/ { print $1; exit }')"
+            [ -n "$sha" ] || sha="$(printf '%s\n' "$refs" | awk 'NR == 1 { print $1 }')"
+          fi
+
+          if ! printf '%s' "$sha" | grep -qiE '^[0-9a-f]{40}$'; then
+            echo "::error::core_ref '$ref' tidak bisa diresolve ke commit di $core_repo. Pakai nama branch/tag yang ada, atau SHA lengkap 40 karakter."
+            exit 1
+          fi
+
+          echo "core_ref '$ref' -> $sha"
 
           {
             echo "owner=$owner"
             echo "core_ref=$ref"
+            echo "core_sha=$sha"
             echo "safe_ref=$(echo "$ref" | tr '/' '-')"
             echo "deps_tag=$deps"
             echo "boost_version=$boost"
@@ -146,7 +175,7 @@ jobs:
           build-args: |
             DEPS_IMAGE=ghcr.io/${{ needs.preflight.outputs.owner }}/skyfire-deps:${{ needs.preflight.outputs.deps_tag }}
             CORE_REPO=https://github.com/${{ needs.preflight.outputs.owner }}/Prabowow-PandaCore.git
-            CORE_REF=${{ needs.preflight.outputs.core_ref }}
+            CORE_REF=${{ needs.preflight.outputs.core_sha }}
           tags: |
             ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-server:${{ needs.preflight.outputs.safe_ref }}
             ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-server:${{ github.sha }}
@@ -162,6 +191,7 @@ jobs:
             echo "| | |"
             echo "|---|---|"
             echo "| Core ref | \`${{ needs.preflight.outputs.core_ref }}\` |"
+            echo "| Core commit | \`${{ needs.preflight.outputs.core_sha }}\` |"
             echo "| Base image | \`skyfire-deps:${{ needs.preflight.outputs.deps_tag }}\` |"
             echo "| Image | \`ghcr.io/${{ needs.preflight.outputs.owner }}/prabowow-pandaria-server:${{ github.sha }}\` |"
             echo ""

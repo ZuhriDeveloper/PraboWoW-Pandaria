@@ -31,7 +31,12 @@ fi
 
 # Ekspansi ${VAR} pada file override. Whitelist eksplisit supaya '$' yang
 # kebetulan ada di nilai lain (mis. password) tidak ikut diproses.
-VARS='${DB_HOST} ${DB_PORT} ${DB_USER} ${DB_PASSWORD} ${DB_AUTH} ${DB_CHARACTERS} ${DB_WORLD} ${REALM_ID} ${REALM_PORT} ${AUTH_PORT} ${DATA_DIR_CONTAINER} ${LOGS_DIR_CONTAINER} ${SQL_DIR_CONTAINER} ${WORLD_DUMP_CONTAINER} ${RATE_XP} ${RATE_DROP_ITEM_COMMON} ${RATE_DROP_ITEM_QUALITY} ${RATE_DROP_ITEM_REFERENCED} ${RATE_DROP_MONEY} ${RATE_HONOR} ${RATE_REPUTATION} ${HEIRLOOM_PRICE_GOLD}'
+#
+# SETIAP ${VAR} baru di config/*.overrides.conf WAJIB didaftarkan di sini. envsubst
+# hanya menyentuh nama yang disebut; yang terlewat lolos LITERAL ke worldserver.conf,
+# lalu ConfigMgr menjalankan atoi("${VAR}") dan mendapat 0 -- bukan default dari
+# .conf.dist. Untuk SkillGain.* nilai 0 berarti profesi tidak pernah naik sama sekali.
+VARS='${DB_HOST} ${DB_PORT} ${DB_USER} ${DB_PASSWORD} ${DB_AUTH} ${DB_CHARACTERS} ${DB_WORLD} ${REALM_ID} ${REALM_PORT} ${AUTH_PORT} ${DATA_DIR_CONTAINER} ${LOGS_DIR_CONTAINER} ${SQL_DIR_CONTAINER} ${WORLD_DUMP_CONTAINER} ${RATE_XP} ${RATE_DROP_ITEM_COMMON} ${RATE_DROP_ITEM_QUALITY} ${RATE_DROP_ITEM_REFERENCED} ${RATE_DROP_MONEY} ${RATE_HONOR} ${RATE_REPUTATION} ${RATE_PROFESSION} ${HEIRLOOM_PRICE_GOLD}'
 
 RENDERED="$(mktemp)"
 # shellcheck disable=SC2016

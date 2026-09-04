@@ -132,6 +132,9 @@ services:
       RATE_DROP_MONEY: ${RATE_DROP_MONEY:-1}
       RATE_HONOR: ${RATE_HONOR:-1}
       RATE_REPUTATION: ${RATE_REPUTATION:-1}
+      # Poin skill per skill-up profesi yang berhasil (SkillGain.Crafting dan
+      # SkillGain.Gathering), bukan pengali peluang. Bilangan bulat.
+      RATE_PROFESSION: ${RATE_PROFESSION:-1}
       # Harga tiap heirloom di vendor mod-prabowow, dalam gold. 0 = gratis,
       # negatif = pakai harga bawaan DB2. Default disamakan dengan Dockerfile.
       HEIRLOOM_PRICE_GOLD: ${HEIRLOOM_PRICE_GOLD:-0}

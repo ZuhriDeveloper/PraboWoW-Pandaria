@@ -125,6 +125,53 @@ Command pemain butuh RBAC permission 1100-1102 (auth) dan tabel
 `character_xp_rate` (characters); keduanya `sql/updates/*` di repo core dan
 diterapkan otomatis saat world start.
 
+## Playerbots (mod-playerbots)
+
+Bot pemain untuk menghidupkan realm: dibuat otomatis, login sendiri, bisa
+di-invite ke party, follow, dan bertarung dengan rotasi per-spec MoP (34 spec,
+monk termasuk). Modulnya `modules/mod-playerbots` di repo core, vendor dari
+[DigiD702/mod-playerbots](https://github.com/DigiD702/mod-playerbots) -- satu-
+satunya playerbot yang ditulis untuk SkyFire 5.4.8. `mod-playerbots` versi
+AzerothCore **tidak bisa dipakai** di sini: itu WotLK 3.3.5a dan butuh fork
+AzerothCore.
+
+Dinyalakan lewat `.env` di VPS (default image: **mati**):
+
+| Var | Default | Arti |
+|---|---|---|
+| `PLAYERBOTS_ENABLE` | `0` | Saklar tunggal: modul, pool bot acak, dan pembuatan akun saat boot. |
+| `PLAYERBOTS_ACCOUNT_PASSWORD` | *(kosong)* | Password akun `RNDBOT1..n`. **Wajib** saat `ENABLE=1`; entrypoint menolak start kalau kosong. |
+| `PLAYERBOTS_MAX_BOTS` | `10` | Bot online sekaligus. Tiap bot = satu `Player` penuh di world thread -- naikkan setelah melihat CPU/RAM. |
+| `PLAYERBOTS_ACCOUNTS` | `5` | Akun bot yang dibuat, 4 karakter per akun, level acak 1-90. |
+| `PLAYERBOTS_JOIN_LFG` | `0` | Bot acak ikut mengisi antrean dungeon finder pemain. Nyalakan setelah stabil. |
+
+Key lain di `config/playerbots.overrides.conf`; referensi semua opsi di
+`modules/mod-playerbots/conf/playerbots.conf.dist` repo core.
+
+Perintah GM (console atau in-game; lengkapnya `modules/mod-playerbots/COMMANDS.md`):
+
+| Perintah | Fungsi |
+|---|---|
+| `.playerbots status` | Hitungan bot acak / aktif / kandidat. |
+| `.playerbots create` | Buat akun+karakter bot yang masih kurang (idempoten). |
+| `.playerbots add <nama>` / `remove <nama>` | Login / logout satu bot. |
+| `.playerbots init [<nama>] [tank\|healer\|dps]` | Gear + spec + glyph ulang; ganti role. |
+| `.playerbots summon` | Teleport semua bot di party ke posisi kamu. |
+| `.playerbots self` | AI cast-only menempel ke karaktermu sendiri. |
+
+Perintah chat ke bot (whisper atau party): `follow`, `stay`, `attack`, `pull`,
+`flee`, `grind`, `passive`, `sell`, `mount`, `co +heal`, dan lainnya.
+
+Yang perlu diketahui:
+
+- Bot **tidak pernah** memakai karakter pemain asli -- hanya akun ber-prefix `RNDBOT`.
+- `Playerbots.DeleteRandomBotAccounts` menghapus semua akun itu saat startup.
+  Sengaja `0` dan tidak diekspos ke `.env`; pakai `.playerbots wipe confirm`.
+- Tabel `playerbots_preferred_mounts` (characters) dibuat modul sendiri saat load;
+  SQL-nya juga dilacak di `sql/` repo core.
+- Repo modul upstream tidak menyertakan file LICENSE. Untuk server pribadi ini
+  bukan masalah praktis; jangan redistribusi image-nya.
+
 ## Catatan yang mahal kalau terlewat
 
 - **`REALM_ADDRESS` harus IP publik/hostname VPS.** Kalau `127.0.0.1`, pemain

@@ -32,6 +32,29 @@ case "${DB_PASSWORD:-}" in
 esac
 
 render-config.sh "$ROLE"
+
+if [ "$ROLE" = "worldserver" ]; then
+    # mod-playerbots membaca playerbots.conf dari direktori worldserver.conf.
+    # .conf.dist-nya di-install oleh sistem modul core saat build; kalau tidak
+    # ada, image ini dibangun dari core yang belum membawa modules/mod-playerbots.
+    ETC="${SKYFIRE_ETC:-/opt/skyfire/etc}"
+    if [ -f "${ETC}/playerbots.conf.dist" ]; then
+        # Akun bot RNDBOT* dibuat dengan password ini. Default dist adalah
+        # "password" -- kosong atau default berarti siapa pun bisa login sebagai
+        # bot di realm publik, jadi gagal keras seperti DB_PASSWORD.
+        if [ "${PLAYERBOTS_ENABLE:-0}" = "1" ] && [ -z "${PLAYERBOTS_ACCOUNT_PASSWORD:-}" ]; then
+            echo "FATAL: PLAYERBOTS_ENABLE=1 tapi PLAYERBOTS_ACCOUNT_PASSWORD kosong." >&2
+            echo "Isi di .env, mis. \`openssl rand -base64 24\` (tanpa tanda kutip ganda)." >&2
+            exit 1
+        fi
+        render-config.sh playerbots
+    elif [ "${PLAYERBOTS_ENABLE:-0}" = "1" ]; then
+        echo "FATAL: PLAYERBOTS_ENABLE=1 tapi core di image ini tidak membawa modul playerbots" >&2
+        echo "(${ETC}/playerbots.conf.dist tidak ada). Build ulang dengan core_ref yang memuatnya." >&2
+        exit 1
+    fi
+fi
+
 wait-for-mysql.sh
 
 if [ "$ROLE" = "authserver" ]; then

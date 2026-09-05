@@ -138,6 +138,17 @@ services:
       # Harga tiap heirloom di vendor mod-prabowow, dalam gold. 0 = gratis,
       # negatif = pakai harga bawaan DB2. Default disamakan dengan Dockerfile.
       HEIRLOOM_PRICE_GOLD: ${HEIRLOOM_PRICE_GOLD:-0}
+      # mod-playerbots (modules/mod-playerbots di repo core). Satu saklar untuk
+      # modul + pool bot acak + pembuatan akun saat boot. Default image mati.
+      # PLAYERBOTS_ACCOUNT_PASSWORD WAJIB diisi saat ENABLE=1: akun RNDBOT* dibuat
+      # dengan password itu dan entrypoint menolak start kalau kosong. Mulai
+      # dengan MAX_BOTS kecil -- tiap bot adalah satu Player penuh di world
+      # thread; naikkan setelah melihat CPU/RAM container ini.
+      PLAYERBOTS_ENABLE: ${PLAYERBOTS_ENABLE:-0}
+      PLAYERBOTS_ACCOUNT_PASSWORD: ${PLAYERBOTS_ACCOUNT_PASSWORD:-}
+      PLAYERBOTS_MAX_BOTS: ${PLAYERBOTS_MAX_BOTS:-10}
+      PLAYERBOTS_ACCOUNTS: ${PLAYERBOTS_ACCOUNTS:-5}
+      PLAYERBOTS_JOIN_LFG: ${PLAYERBOTS_JOIN_LFG:-0}
     volumes:
       # Data turunan client: ~20-25 GB, diunggah sekali dengan
       # tools/upload-client-data.sh, tidak pernah masuk git maupun image.

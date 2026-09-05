@@ -103,8 +103,9 @@ ENV LD_LIBRARY_PATH=/opt/openssl/lib64 \
 
 # Default untuk setiap ${VAR} di config/*.overrides.conf, supaya render-config
 # tidak pernah menghasilkan nilai kosong kalau compose lupa mengoper satu var.
-# Yang tidak punya default di sini (DB_PASSWORD, REALM_ADDRESS) memang harus
-# gagal keras daripada diam-diam salah.
+# Yang tidak punya default di sini (DB_PASSWORD, REALM_ADDRESS, dan
+# PLAYERBOTS_ACCOUNT_PASSWORD saat PLAYERBOTS_ENABLE=1) memang harus gagal keras
+# daripada diam-diam salah.
 ENV DB_HOST=db \
     DB_PORT=3306 \
     DB_USER=skyfire \
@@ -126,7 +127,11 @@ ENV DB_HOST=db \
     RATE_HONOR=1 \
     RATE_REPUTATION=1 \
     RATE_PROFESSION=1 \
-    HEIRLOOM_PRICE_GOLD=0
+    HEIRLOOM_PRICE_GOLD=0 \
+    PLAYERBOTS_ENABLE=0 \
+    PLAYERBOTS_MAX_BOTS=10 \
+    PLAYERBOTS_ACCOUNTS=5 \
+    PLAYERBOTS_JOIN_LFG=0
 
 # Smoke test saat build: legacy provider harus aktif (SRP6/GRUNT butuh ini)
 # dan kedua binary harus ter-resolve penuh oleh dynamic linker.

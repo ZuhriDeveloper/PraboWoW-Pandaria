@@ -118,7 +118,7 @@ dinyalakan lewat key `PraboWoW.*` di `config/worldserver.overrides.conf`.
 | Chat satu realm | `.chat <pesan>` -- sampai ke semua pemain, kedua faksi. Cooldown 3 detik, hormati mute. |
 | Auto-jual item abu-abu | Otomatis saat loot; uangnya langsung masuk. |
 | Semua flight path | Dikenal saat login, sesuai faksi. |
-| Vendor heirloom | NPC "Heirloom Vendor" berdiri di tiap titik spawn karakter baru; harga `HEIRLOOM_PRICE_GOLD` (default 500g). |
+| Vendor heirloom | NPC "Heirloom Vendor" berdiri di tiap titik spawn karakter baru, plus satu di auction house Stormwind dan satu di Orgrimmar; harga `HEIRLOOM_PRICE_GOLD` (default 500g). |
 | Surat karakter baru | Item 23162 (tas 36 slot) x1 lewat mailbox. |
 | Skip zona awal DK/Worgen/Goblin | **Sementara.** Chain quest awalnya dianggap selesai: quest di zona awal ditandai rewarded, level naik ke 58/12/12, racial dan spell dari chain-nya diberikan, lalu dipindah ke Stormwind/Orgrimmar sekalian hearthstone. Sekali per karakter. Matikan per profil lewat `PraboWoW.StartZoneSkip.*` kalau chain-nya sudah dibetulkan. |
 

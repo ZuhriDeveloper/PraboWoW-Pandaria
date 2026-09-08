@@ -180,8 +180,9 @@ Bisa dipakai semua akun, tanpa GM level:
 ```
 
 Otomatis tanpa command: item abu-abu terjual saat loot, semua flight path
-dikenal saat login, NPC "Heirloom Vendor" di tiap titik spawn karakter baru,
-dan karakter baru dapat surat berisi tas 36 slot (item 23162).
+dikenal saat login, NPC "Heirloom Vendor" di tiap titik spawn karakter baru
+serta di auction house Stormwind dan Orgrimmar, dan karakter baru dapat surat
+berisi tas 36 slot (item 23162).
 
 ---
 

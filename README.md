@@ -120,9 +120,12 @@ dinyalakan lewat key `PraboWoW.*` di `config/worldserver.overrides.conf`.
 | Semua flight path | Dikenal saat login, sesuai faksi. |
 | Vendor heirloom | NPC "Heirloom Vendor" berdiri di tiap titik spawn karakter baru; harga `HEIRLOOM_PRICE_GOLD` (default 500g). |
 | Surat karakter baru | Item 23162 (tas 36 slot) x1 lewat mailbox. |
+| Skip zona awal DK/Worgen/Goblin | **Sementara.** Chain quest awalnya dianggap selesai: quest di zona awal ditandai rewarded, level naik ke 58/12/12, racial dan spell dari chain-nya diberikan, lalu dipindah ke Stormwind/Orgrimmar sekalian hearthstone. Sekali per karakter. Matikan per profil lewat `PraboWoW.StartZoneSkip.*` kalau chain-nya sudah dibetulkan. |
 
 Command pemain butuh RBAC permission 1100-1102 (auth) dan tabel
-`character_xp_rate` (characters); keduanya `sql/updates/*` di repo core dan
+`character_xp_rate` (characters). Skip zona awal butuh tabel
+`character_startzone_skip` (characters) -- hapus barisnya kalau mau fiturnya
+jalan lagi untuk satu karakter. Semuanya `sql/updates/*` di repo core dan
 diterapkan otomatis saat world start.
 
 ## Playerbots (mod-playerbots)

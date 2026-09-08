@@ -246,6 +246,10 @@ Ini memberi waktu proses save karakter (~2 menit grace period).
 
 Terutama kalau update menyentuh `sql/updates/characters/` atau `sql/updates/world/`.
 
+Wajib juga sebelum menyalakan `PraboWoW.StartZoneSkip.*` pertama kali: fitur itu
+menulis ke SETIAP karakter DK/Worgen/Goblin yang login -- quest ditandai selesai,
+level naik, dan posisi mereka pindah ke ibu kota.
+
 ---
 
 ## 🔍 TROUBLESHOOTING QUICK CHECKLIST

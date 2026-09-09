@@ -263,6 +263,7 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Legacy OpenSSL error | Build ulang deps: `gh workflow run build-deps-image.yml` |
 | Can't connect (Unable to connect) | Check firewall/DNS; `realmlist` salah ketik |
 | Zona 80-90 kosong, tidak ada mob & quest | Jalankan audit di bagian CEK KONTEN LEVELING; zona dengan `quest` besar tapi `pemberi_terspawn` 0 belum diport |
+| Quest "Hero's Call / Warchief's Command: Mount Hyjal!" tidak selesai setelah teleport ke Moonglade | Buka saja jendela Emissary Windsong di Nighthaven — quest ditandai selesai saat jendelanya dibuka. Emissary ibu kota juga menyelesaikannya sebelum teleport sejak perbaikan ini masuk |
 | Quest "As Hyjal Burns" mentok di Moonglade | Batalkan lalu ambil lagi dari Emissary Windsong — teleportnya menyala saat quest diterima |
 
 ---

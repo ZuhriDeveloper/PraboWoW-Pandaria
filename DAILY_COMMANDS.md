@@ -262,3 +262,48 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | World crash saat start | Check TTY settings di compose — `tty: true` dan `stdin_open: true` harus ada |
 | Legacy OpenSSL error | Build ulang deps: `gh workflow run build-deps-image.yml` |
 | Can't connect (Unable to connect) | Check firewall/DNS; `realmlist` salah ketik |
+| Zona 80-90 kosong, tidak ada mob & quest | Jalankan audit di bagian CEK KONTEN LEVELING; zona dengan `quest` besar tapi `pemberi_terspawn` 0 belum diport |
+| Quest "As Hyjal Burns" mentok di Moonglade | Batalkan lalu ambil lagi dari Emissary Windsong — teleportnya menyala saat quest diterima |
+
+---
+
+## 🧭 CEK KONTEN LEVELING 80-90
+
+Dump dasar SFDB tidak ada di repo mana pun; ia diunduh sekali ke volume Docker.
+Jadi satu-satunya cara tahu zona mana yang benar-benar kosong adalah bertanya ke
+DB yang sedang jalan.
+
+```bash
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < audit_leveling_coverage.sql
+```
+
+File-nya ada di repo core: `tools/dev/audit_leveling_coverage.sql`. Semua
+statement-nya SELECT, aman dijalankan kapan saja.
+
+Yang dibaca duluan bagian 2. Satu zona baru bisa dimainkan kalau
+`pemberi_terspawn` dan `penutup_terspawn` mendekati `quest`. Kalau `quest` besar
+tapi keduanya 0, quest-nya ada di DB tapi tidak ada satu pun NPC-nya — itu
+kondisi Mount Hyjal sebelum diport, dan artinya zona itu perlu port spawn.
+
+### Status jalur 80-90
+
+| Band | Zona | Status |
+|------|------|--------|
+| 80-82 | Mount Hyjal | Diport (`2026_09_08_world_02/03.sql`) + tumpangan Moonglade→Nordrassil |
+| 80-83 | Vashj'ir | **Belum** — sengaja dilewat, sejajar dengan Hyjal dan paling berat scriptnya |
+| 82-83 | Deepholm | Diport |
+| 83-84 | Uldum | Diport |
+| 84-85 | Twilight Highlands | Diport |
+| 85-90 | Pandaria | Quest dan tautan quest giver ada di SFDB; kelengkapan spawn-nya **belum diukur** — jalankan audit di atas |
+
+Port zona baru dibuat dengan `tools/dev/port_zone_spawns.py --zone <nama>` di
+repo core, dari dump world TrinityCore 4.3.4. Dump itu tidak punya konten
+Pandaria sama sekali, jadi kalau audit menunjukkan Pandaria juga kosong,
+sumbernya harus dicari di tempat lain — bukan dari dump 4.3.4.
+
+**Catatan phasing.** Semua spawn hasil port dipasang di phase 0 supaya terlihat
+semua pemain. Zona Cataclysm aslinya berubah bentuk mengikuti kemajuan quest
+lewat script C++ yang tidak ada di SkyFire; tanpa perataan itu zonanya tetap
+terlihat kosong. Harganya: beberapa versi area yang sama tampil bersamaan, dan
+quest yang kemajuannya bergantung pada perubahan fase tidak akan selesai.

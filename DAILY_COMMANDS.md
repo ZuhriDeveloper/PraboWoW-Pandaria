@@ -265,6 +265,8 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Zona 80-90 kosong, tidak ada mob & quest | Jalankan audit di bagian CEK KONTEN LEVELING; zona dengan `quest` besar tapi `pemberi_terspawn` 0 belum diport |
 | Quest "Hero's Call / Warchief's Command: Mount Hyjal!" tidak selesai setelah teleport ke Moonglade | Buka saja jendela Emissary Windsong di Nighthaven — quest ditandai selesai saat jendelanya dibuka. Emissary ibu kota juga menyelesaikannya sebelum teleport sejak perbaikan ini masuk |
 | Quest "As Hyjal Burns" mentok di Moonglade | Batalkan lalu ambil lagi dari Emissary Windsong — teleportnya menyala saat quest diterima |
+| Mob Hyjal/Deepholm/Uldum/Twilight Highlands tidak drop apa pun, mayatnya tidak berkilau | `lootid` dan `maxgold` sama-sama nol di dump 4.3.4 dan ikut terbawa. Ukur dengan `audit_loot_coverage.sql` bagian 1, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` |
+| Papan tugas tidak menawarkan quest Pandaria di level 85 | Bukan gerbang expansion — quest 29547/29611 memang tidak punya baris `gameobject_queststarter` di SFDB. Lihat `prabowow_pandaria_intro_board_and_travel.sql` |
 
 ---
 
@@ -282,6 +284,19 @@ docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
 File-nya ada di repo core: `tools/dev/audit_leveling_coverage.sql`. Semua
 statement-nya SELECT, aman dijalankan kapan saja.
 
+Dua audit yang lebih dalam ada di folder yang sama, dipakai kalau audit umum di
+atas menunjukkan ada yang aneh:
+
+```bash
+# mob yang mayatnya tidak bisa di-loot sama sekali, per blok guid zona hasil port
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < audit_loot_coverage.sql   > audit_loot.txt
+
+# jalan masuk quest Pandaria lewat papan tugas, plus isi zonanya
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < audit_pandaria_intro.sql  > audit_pandaria.txt
+```
+
 Yang dibaca duluan bagian 2. Satu zona baru bisa dimainkan kalau
 `pemberi_terspawn` dan `penutup_terspawn` mendekati `quest`. Kalau `quest` besar
 tapi keduanya 0, quest-nya ada di DB tapi tidak ada satu pun NPC-nya — itu
@@ -296,7 +311,15 @@ kondisi Mount Hyjal sebelum diport, dan artinya zona itu perlu port spawn.
 | 82-83 | Deepholm | Diport |
 | 83-84 | Uldum | Diport |
 | 84-85 | Twilight Highlands | Diport |
-| 85-90 | Pandaria | Quest dan tautan quest giver ada di SFDB; kelengkapan spawn-nya **belum diukur** — jalankan audit di atas |
+| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest; kelengkapan spawn zonanya **masih belum diukur** — jalankan `audit_pandaria_intro.sql` bagian 10 dan 11 sebelum mengandalkannya |
+
+**Drop mob zona hasil port.** Sampai
+`prabowow_cataclysm_zone_loot_and_gold.sql` masuk, sebagian besar mob keempat
+zona di atas tidak menjatuhkan apa pun — bukan "loot-nya kosong", mayatnya tidak
+bisa diklik sama sekali. Sebabnya `lootid` dan `maxgold` sama-sama nol di dump
+4.3.4 dan ikut terbawa apa adanya; `Unit.cpp:6688` baru memasang
+`UNIT_DYNFLAG_LOOTABLE` kalau salah satunya bukan nol. Ukur dengan
+`audit_loot_coverage.sql` bagian 1.
 
 Port zona baru dibuat dengan `tools/dev/port_zone_spawns.py --zone <nama>` di
 repo core, dari dump world TrinityCore 4.3.4. Dump itu tidak punya konten

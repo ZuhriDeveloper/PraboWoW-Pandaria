@@ -268,6 +268,10 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Mob Hyjal/Deepholm/Uldum/Twilight Highlands tidak drop apa pun, mayatnya tidak berkilau | `lootid` dan `maxgold` sama-sama nol di dump 4.3.4 dan ikut terbawa. Ukur dengan `audit_loot_coverage.sql` bagian 1, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` |
 | Mob Hyjal/Deepholm/Uldum/Twilight Highlands cuma menjatuhkan gold, tidak pernah ada item | Keadaan yang lain: `maxgold` > 0 sudah cukup membuat mayatnya berkilau, tapi `lootid` = 0 berarti tidak ada satu item pun. Berasal dari baris `creature_template` milik SFDB sendiri, bukan dari port. Ukur dengan `audit_loot_coverage.sql` bagian 1d dan 1e, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` yang sama |
 | Papan tugas tidak menawarkan quest Pandaria di level 85 | Bukan gerbang expansion — quest 29547/29611 memang tidak punya baris `gameobject_queststarter` di SFDB. Lihat `prabowow_pandaria_intro_board_and_travel.sql` |
+| Tidak ada portal ke Pandaria di Stormwind / Orgrimmar | Portalnya sebenarnya BERDIRI di kedua kota — SFDB memasangnya sejak rilis 10_to_11. Yang tidak ada itu tujuannya: spell di `data0` tidak punya baris `spell_target_position`. Ukur dengan `audit_pandaria_loot.sql` bagian 7, perbaiki dengan `prabowow_pandaria_city_portals.sql` |
+| Portal Pandaria diklik tapi pemain tidak pindah | Gejala yang sama persis dengan baris di atas, dan sebabnya juga sama. `spell_punya_tujuan` = 0 di bagian 7 audit memastikannya |
+| Mob Pandaria terlalu tebal / lama dibunuh | `prabowow_pandaria_mob_health.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
+| Mob Pandaria tidak menjatuhkan apa pun | Jangan langsung menyalin solusi zona Cataclysm. Pandaria konten asli SFDB, bukan hasil port, jadi lootnya bisa saja utuh. Ukur dulu dengan `audit_pandaria_loot.sql` bagian 1 |
 
 ---
 
@@ -312,7 +316,7 @@ kondisi Mount Hyjal sebelum diport, dan artinya zona itu perlu port spawn.
 | 82-83 | Deepholm | Diport |
 | 83-84 | Uldum | Diport |
 | 84-85 | Twilight Highlands | Diport |
-| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest. Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
+| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest, dan portal ibu kotanya diperbaiki (`prabowow_pandaria_city_portals.sql`). Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
 
 **Drop mob zona hasil port.** File perbaikannya masih ada di
 `sql/pending_updates/world/`, dan `WorldDatabase.ImportPendingUpdates = 0` di
@@ -380,6 +384,125 @@ berisi di dump dasar, padahal keduanya tetap diport. Kalau angka serupa muncul
 di DB hidup, ada kemungkinan spawn-nya dobel — `DELETE` di file port hanya
 menyapu blok guid `84xxxxx` miliknya sendiri dan tidak menyentuh spawn asli
 SFDB. Konfirmasi ke DB hidup dulu sebelum menyimpulkan apa pun.
+
+### Portal, HP, dan loot Pandaria
+
+Tiga perubahan yang berdiri sendiri, semuanya di `sql/pending_updates/world/`
+repo core. Karena `WorldDatabase.ImportPendingUpdates = 0`, tidak satu pun jalan
+sendiri saat worldserver naik — lihat "Menjalankan file pending dengan tangan"
+di bawah.
+
+**Portal ke Jade Forest** (`prabowow_pandaria_city_portals.sql`). Portalnya tidak
+pernah hilang: SFDB sudah memasang keduanya sejak rilis 10_to_11, dan keduanya
+memang berdiri di tempat yang benar.
+
+| Entry | Nama | Kota | Map | Koordinat |
+|-------|------|------|-----|-----------|
+| 215424 | Portal to Honydew Village (Horde) | Orgrimmar | 1 | 2014.8, -4700.3, 28.6 |
+| 215457 | Portal to Paw don Village (Alliance) | Stormwind | 0 | -8194.5, 528.1, 117.3 |
+
+Yang tidak ada adalah tujuannya. Keduanya `type` 22 (SPELLCASTER), dan
+`GameObject.cpp:1853` mengambil `data0` sebagai spell yang dirapal pemain — tapi
+`data0`-nya 130698 dan 130703, dan tidak satu pun dari keduanya punya baris
+`spell_target_position` di seluruh `sql/old`. Jadi portalnya berdiri, animasinya
+jalan, pemainnya tidak pindah ke mana-mana.
+
+Perbaikannya mengarahkan `data0` ke 130321 (Alliance) dan 125060 (Horde) —
+dua spell teleport Jade Forest yang tujuannya memang sudah ada di DB, dipakai
+SFDB sendiri untuk gossip kapal, dan titik mendaratnya sama persis dengan yang
+dipakai Pandaria Emissary. Tidak ada baris baru yang ditambahkan ke tabel mana
+pun.
+
+Menambah baris `spell_target_position` untuk 130698/130703 **bukan** jalan
+keluarnya: effIndex-nya ada di `Spell.dbc`, bukan di DB (130321 memakai 0,
+125060 memakai 1), jadi ia tidak bisa diturunkan dari SQL dan menebak berarti
+satu baris error `sql.sql` di setiap boot.
+
+**HP mob Pandaria** (`prabowow_pandaria_mob_health.sql`). Menurunkan
+`creature_template`.`Health_mod` map 870 jadi 30% dari aslinya, semua rank
+termasuk world boss. Rate di config tidak bisa dipakai untuk ini: ia berlaku
+untuk seluruh realm dan tidak punya varian per-map.
+
+Lingkupnya hanya entry yang terspawn di map 870 **dan tidak terspawn di peta
+lain** — `creature_template` dipakai bersama semua peta, jadi entry yang dipakai
+bersama sengaja dilewat supaya mob yang sama di Azeroth tidak ikut menipis.
+Jumlah yang dilewat muncul di laporan sebagai `dipakai_peta_lain`.
+
+Nilai asli setiap entry disimpan di tabel `prabowow_pandaria_health_backup`
+sebelum apa pun ditimpa, dan UPDATE-nya selalu dihitung dari situ — jadi file
+itu boleh dijalankan berapa kali pun tanpa HP-nya menyusut berlipat. Tabel itu
+sengaja tidak dibuang; ia satu-satunya jalan pulang:
+
+```sql
+UPDATE `creature_template` `ct`
+JOIN `prabowow_pandaria_health_backup` `b` ON `b`.`entry` = `ct`.`entry`
+SET `ct`.`Health_mod` = `b`.`health_mod_asli`;
+```
+
+HP dipasang saat creature di-spawn, jadi mob yang sudah berdiri tetap tebal
+sampai ia mati dan respawn, atau sampai world restart.
+
+**Loot mob Pandaria** (`prabowow_pandaria_mob_loot_and_gold.sql`). ⚠️ Ini
+satu-satunya dari ketiganya yang **belum diukur ke DB hidup**, dan ia mungkin
+benar-benar tidak perlu dijalankan.
+
+Jangan menyamakannya dengan zona Cataclysm. Zona itu rusak karena diport dari
+dump TrinityCore 4.3.4 yang `lootid`-nya nol; Pandaria tidak pernah diport — ia
+konten asli SFDB 5.4.8, dan `port_zone_spawns.py` tidak bisa menyentuhnya karena
+dump 4.3.4 tidak punya map 870 sama sekali. Jadi sangat mungkin loot Pandaria
+utuh dan keluhannya berasal dari hal lain.
+
+Karena itu ukur dulu:
+
+```bash
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < audit_pandaria_loot.sql   > audit_pandaria_loot.txt
+```
+
+File-nya ada di repo core: `tools/dev/audit_pandaria_loot.sql`, semua
+statement-nya SELECT. Bagian 1 adalah vonisnya. Kalau `tanpa_loot_dan_uang` dan
+`uang_saja_tanpa_loot` dua-duanya nol, loot Pandaria tidak rusak, file
+perbaikannya tidak perlu dijalankan, dan keluhannya harus dicari dari arah lain
+— `Rate.Drop.*` di `config/worldserver.overrides.conf`, atau yang dibunuh
+ternyata critter. Bagian 7 sekalian memeriksa kedua portal di atas.
+
+Kalaupun dijalankan tanpa diukur, file itu self-scoping: ia menghitung lingkupnya
+dari DB tempat ia dijalankan dan tidak menyentuh satu baris pun kalau tidak ada
+yang rusak. Laporan di bagian 7 file itu yang memberi tahu mana yang terjadi.
+
+### Menjalankan file pending dengan tangan
+
+`WorldDatabase.ImportPendingUpdates = 0` di `config/worldserver.overrides.conf`,
+jadi isi `sql/pending_updates/world/` **tidak pernah** jalan sendiri. Selama
+belum dipromosikan ke `sql/updates/world/`, satu-satunya cara menerapkannya ke
+DB yang sedang jalan adalah dengan tangan.
+
+Backup dulu — ketiganya menulis ke `creature_template`, tabel terbesar di world
+DB:
+
+```bash
+./scripts/backup-db.sh
+```
+
+Lalu, urut, dan baca keluaran tiap file sebelum lanjut ke berikutnya:
+
+```bash
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < prabowow_pandaria_city_portals.sql
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < prabowow_pandaria_mob_health.sql
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < prabowow_pandaria_mob_loot_and_gold.sql
+```
+
+Ketiganya idempotent — aman diulang. Sesudahnya world perlu restart supaya
+`creature_template` dan `gameobject_template` dibaca ulang:
+
+```bash
+docker compose $PW restart world
+```
+
+Portal langsung terasa sesudah restart. HP baru terasa pada mob yang respawn.
 
 ### DB acuan lokal (`sfdb_ref`) untuk audit tanpa VPS
 

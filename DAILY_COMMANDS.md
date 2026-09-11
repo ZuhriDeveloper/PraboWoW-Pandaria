@@ -270,6 +270,8 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Papan tugas tidak menawarkan quest Pandaria di level 85 | Bukan gerbang expansion — quest 29547/29611 memang tidak punya baris `gameobject_queststarter` di SFDB. Lihat `prabowow_pandaria_intro_board_and_travel.sql` |
 | Tidak ada portal ke Pandaria di Stormwind / Orgrimmar | Portalnya sebenarnya BERDIRI di kedua kota — SFDB memasangnya sejak rilis 10_to_11. Yang tidak ada itu tujuannya: spell di `data0` tidak punya baris `spell_target_position`. Ukur dengan `audit_pandaria_loot.sql` bagian 7, perbaiki dengan `prabowow_pandaria_city_portals.sql` |
 | Portal Pandaria diklik tapi pemain tidak pindah | Gejala yang sama persis dengan baris di atas, dan sebabnya juga sama. `spell_punya_tujuan` = 0 di bagian 7 audit memastikannya |
+| Portal Pandaria tenggelam separuh ke dalam tanah | Z di baris spawn SFDB persis setinggi tanah, dan `GameObject.cpp:179` memakainya apa adanya tanpa penyesuaian. Dinaikkan `@Z_LIFT` di bagian 3b `prabowow_pandaria_city_portals.sql`. Tinggi pastinya dicari di client — lihat "Menyetel tinggi portal" |
+| Portal Pandaria menghadap arah yang salah | `rotation3` = 1 di baris SFDB membuat `UpdateRotationFields` (`GameObject.cpp:2192`) mengabaikan `orientation`, karena ia hanya menghitung sendiri kalau `rotation2` DAN `rotation3` dua-duanya nol. Bagian 3b menolkan keduanya |
 | Mob Pandaria terlalu tebal / lama dibunuh | `prabowow_pandaria_mob_health.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
 | Mob Pandaria tidak menjatuhkan apa pun | Jangan langsung menyalin solusi zona Cataclysm. Pandaria konten asli SFDB, bukan hasil port, jadi lootnya bisa saja utuh. Ukur dulu dengan `audit_pandaria_loot.sql` bagian 1 |
 
@@ -417,6 +419,41 @@ Menambah baris `spell_target_position` untuk 130698/130703 **bukan** jalan
 keluarnya: effIndex-nya ada di `Spell.dbc`, bukan di DB (130321 memakai 0,
 125060 memakai 1), jadi ia tidak bisa diturunkan dari SQL dan menebak berarti
 satu baris error `sql.sql` di setiap boot.
+
+#### Menyetel tinggi portal
+
+Baris spawn SFDB itu punya dua cacat lagi yang baru kelihatan begitu portalnya
+benar-benar dipakai: **tenggelam separuh ke tanah**, dan **menghadap arah yang
+salah**. Keduanya diperbaiki di bagian 3b file yang sama.
+
+Arah hadapnya pasti benar sesudah perbaikan — `rotation2` dan `rotation3`
+dinolkan supaya core menghitungnya sendiri dari `orientation`. Tingginya tidak:
+`@Z_LIFT` = 2.0 itu **perkiraan**, karena tinggi pivot model 12658 ada di
+`GameObjectDisplayInfo.dbc` dan tidak bisa dibaca dari SQL.
+
+Angka pastinya dicari di client, dan hasilnya langsung tersimpan sendiri —
+`.gobject move` memanggil `SaveToDB()` di akhir:
+
+```
+.gobject near 30
+```
+
+```
+.gobject move <guid> <x> <y> <z>
+```
+
+Kalau sudah pas, baca balik posisinya, kurangi dengan Z tanah (28.62439 di
+Orgrimmar, 117.2901 di Stormwind), lalu tulis selisihnya ke `@Z_LIFT` supaya DB
+yang dibangun dari nol nanti ikut benar:
+
+```bash
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world -e "SELECT guid, id, map, position_x, position_y, position_z, orientation, rotation2, rotation3 FROM gameobject WHERE id IN (215424, 215457);"
+```
+
+Kedua UPDATE di bagian 3b dijaga sidik jari `rotation2` = 0 **dan** `rotation3`
+= 1 — tanda baris SFDB yang belum pernah disentuh. Jadi portalnya tidak akan
+naik berlipat kalau filenya dijalankan ulang, dan posisi yang sudah kamu setel
+sendiri lewat `.gobject move` tidak akan ditimpa.
 
 **HP mob Pandaria** (`prabowow_pandaria_mob_health.sql`). Menurunkan
 `creature_template`.`Health_mod` map 870 jadi 30% dari aslinya, semua rank

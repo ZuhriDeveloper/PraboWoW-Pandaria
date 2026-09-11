@@ -311,7 +311,7 @@ kondisi Mount Hyjal sebelum diport, dan artinya zona itu perlu port spawn.
 | 82-83 | Deepholm | Diport |
 | 83-84 | Uldum | Diport |
 | 84-85 | Twilight Highlands | Diport |
-| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest; kelengkapan spawn zonanya **masih belum diukur** — jalankan `audit_pandaria_intro.sql` bagian 10 dan 11 sebelum mengandalkannya |
+| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest. Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
 
 **Drop mob zona hasil port.** Sampai
 `prabowow_cataclysm_zone_loot_and_gold.sql` masuk, sebagian besar mob keempat
@@ -331,3 +331,80 @@ semua pemain. Zona Cataclysm aslinya berubah bentuk mengikuti kemajuan quest
 lewat script C++ yang tidak ada di SkyFire; tanpa perataan itu zonanya tetap
 terlihat kosong. Harganya: beberapa versi area yang sama tampil bersamaan, dan
 quest yang kemajuannya bergantung pada perubahan fase tidak akan selesai.
+
+### Hasil ukur Pandaria
+
+Pandaria **tidak** kosong seperti Hyjal. Diukur dengan `audit_pandaria_intro.sql`
+bagian 10 dan 11 pada dump dasar SFDB:
+
+| Zona | quest | pemberi_terspawn | penutup_terspawn |
+|------|-------|------------------|------------------|
+| The Jade Forest | 325 | 151 | 140 |
+| Valley of the Four Winds | 295 | 197 | 177 |
+| Krasarang Wilds | 159 | 85 | 81 |
+| Kun-Lai Summit | 182 | 109 | 111 |
+| Townlong Steppes | 166 | 76 | 75 |
+| Dread Wastes | 116 | 64 | 58 |
+| Vale of Eternal Blossoms | 188 | 16 | 30 |
+
+Map 870 berisi 29.696 creature dan 8.250 gameobject. Jadi mengantar pemain ke
+Jade Forest tidak membuang mereka ke zona kosong, dan `port_zone_spawns.py`
+bukan alat untuk Pandaria — dump 4.3.4 memang tidak punya map 870 sama sekali.
+
+Bandingkan dengan tanda tangan zona yang benar-benar kosong, dari
+`audit_leveling_coverage.sql` bagian 2 pada dump dasar yang sama: Mount Hyjal
+161 quest / 148 punya pemberi / **1** terspawn, dan Twilight Highlands 256 /
+238 / **5**. Pola itulah yang bikin keduanya perlu diport.
+
+Pengecualiannya cuma Vale of Eternal Blossoms: dari 188 quest hanya 17 yang
+punya pemberi di data sama sekali (kolom `ada_pemberi`), jadi lubangnya ada di
+data quest, bukan di spawn. Port spawn tidak akan menolong zona itu.
+
+⚠️ Deepholm (118 dari 154 terspawn) dan Uldum (55 dari 118) ternyata sudah
+berisi di dump dasar, padahal keduanya tetap diport. Kalau angka serupa muncul
+di DB hidup, ada kemungkinan spawn-nya dobel — `DELETE` di file port hanya
+menyapu blok guid `84xxxxx` miliknya sendiri dan tidak menyentuh spawn asli
+SFDB. Konfirmasi ke DB hidup dulu sebelum menyimpulkan apa pun.
+
+### DB acuan lokal (`sfdb_ref`) untuk audit tanpa VPS
+
+Dump dasar SFDB tidak ada di repo mana pun, tapi ia bisa diimpor sekali ke MySQL
+lokal supaya ketiga audit di atas bisa dijalankan tanpa menyentuh VPS:
+
+```bash
+mysql -h 127.0.0.1 -u root -e "CREATE DATABASE sfdb_ref DEFAULT CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci;"
+mysql -h 127.0.0.1 -u root sfdb_ref < SFDB_full_548_<rilis>_Release.sql
+mysql -h 127.0.0.1 -u root --table sfdb_ref < audit_leveling_coverage.sql
+```
+
+Dump-nya tidak punya `CREATE DATABASE` maupun `USE` — ia diambil dari skema
+bernama `skyfire` — jadi skema tujuan wajib disebut di baris perintah. Tidak
+perlu melonggarkan `sql_mode` seperti di produksi: header dump sudah menyetel
+`SQL_MODE='NO_AUTO_VALUE_ON_ZERO'` untuk sesinya sendiri. Ukurannya sekitar
+290 MB terimpor, 172 tabel, dua sampai lima menit.
+
+**Batasnya.** `sfdb_ref` cuma base, tanpa `sql/updates/world/*` di atasnya.
+Angkanya batas bawah, bukan kebenaran — DB yang sedang jalan tetap satu-satunya
+otoritas, dan temuan apa pun yang mau dipakai mengubah konten harus
+dikonfirmasi ulang ke sana. Skemanya juga bergeser antar rilis: di 24.001
+kolomnya `gossip_menu_option`.`menu_id`, di 26.002 sudah `MenuID`, sehingga
+`audit_pandaria_intro.sql` bagian 9 berhenti dengan `Unknown column 'MenuID'`
+kalau dijalankan pada 24.001. Bagian 10 dan 11 tetap jalan.
+
+### Rilis SFDB: jangan turun versi
+
+| Tag | Aset | Terbit |
+|-----|------|--------|
+| `sf_db_26` | `SFDB_full_548_26.002_2026_008_18_Release.zip` | 2026-08-15 |
+| `sf_db_25` | `SFDB_full_548_25.001_2026_007_19_Release.zip` | 2026-07-19 |
+| `24.001` | `SFDB_full_548_24.001_2024_09_04_Release.zip` | 2025-08-06 |
+
+`WORLD_DB_URL` di `.env` sudah menunjuk yang paling baru (`sf_db_26`). Nama
+berkasnya memang salah ketik di hulu (`2026_008_18`, tiga digit), tapi tag dan
+asetnya nyata — jangan "diperbaiki" jadi tanggal yang masuk akal, nanti malah
+404 dan `curl --fail` di `bootstrap-world-db.sh` menggagalkan boot worldserver.
+
+Rilis 24.001 lebih tua dua tingkat; jangan pernah diarahkan ke realm. Lagi pula
+tidak ada jalurnya: base dump hanya bisa masuk ke skema kosong, dan seluruh
+`sql/updates/world/*` sudah terkunci nama + hash di `skyfire_db_updates`, jadi
+menukar base di bawah DB yang sudah jalan bukan operasi yang didukung core.

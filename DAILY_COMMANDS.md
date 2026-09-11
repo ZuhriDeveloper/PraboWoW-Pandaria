@@ -266,6 +266,7 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Quest "Hero's Call / Warchief's Command: Mount Hyjal!" tidak selesai setelah teleport ke Moonglade | Buka saja jendela Emissary Windsong di Nighthaven — quest ditandai selesai saat jendelanya dibuka. Emissary ibu kota juga menyelesaikannya sebelum teleport sejak perbaikan ini masuk |
 | Quest "As Hyjal Burns" mentok di Moonglade | Batalkan lalu ambil lagi dari Emissary Windsong — teleportnya menyala saat quest diterima |
 | Mob Hyjal/Deepholm/Uldum/Twilight Highlands tidak drop apa pun, mayatnya tidak berkilau | `lootid` dan `maxgold` sama-sama nol di dump 4.3.4 dan ikut terbawa. Ukur dengan `audit_loot_coverage.sql` bagian 1, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` |
+| Mob Hyjal/Deepholm/Uldum/Twilight Highlands cuma menjatuhkan gold, tidak pernah ada item | Keadaan yang lain: `maxgold` > 0 sudah cukup membuat mayatnya berkilau, tapi `lootid` = 0 berarti tidak ada satu item pun. Berasal dari baris `creature_template` milik SFDB sendiri, bukan dari port. Ukur dengan `audit_loot_coverage.sql` bagian 1d dan 1e, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` yang sama |
 | Papan tugas tidak menawarkan quest Pandaria di level 85 | Bukan gerbang expansion — quest 29547/29611 memang tidak punya baris `gameobject_queststarter` di SFDB. Lihat `prabowow_pandaria_intro_board_and_travel.sql` |
 
 ---
@@ -313,9 +314,23 @@ kondisi Mount Hyjal sebelum diport, dan artinya zona itu perlu port spawn.
 | 84-85 | Twilight Highlands | Diport |
 | 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest. Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
 
-**Drop mob zona hasil port.** Sampai
-`prabowow_cataclysm_zone_loot_and_gold.sql` masuk, sebagian besar mob keempat
-zona di atas tidak menjatuhkan apa pun — bukan "loot-nya kosong", mayatnya tidak
+**Drop mob zona hasil port.** File perbaikannya masih ada di
+`sql/pending_updates/world/`, dan `WorldDatabase.ImportPendingUpdates = 0` di
+`config/worldserver.overrides.conf`, jadi ia TIDAK pernah ikut jalan sendiri saat
+worldserver naik. Selama belum dipromosikan ke `sql/updates/world/` (atau
+dijalankan dengan tangan ke DB yang jalan), keadaan di bawah masih apa adanya.
+
+Ada dua keluhan yang berbeda, dan keduanya ditangani file yang sama:
+
+- `lootid` = 0 DAN `maxgold` = 0 -- mayatnya tidak bisa diklik sama sekali.
+- `lootid` = 0 tapi `maxgold` > 0 -- mayatnya berkilau, gold keluar, item tidak
+  pernah ada. Ini datang dari baris `creature_template` milik SFDB sendiri: port
+  memakai `INSERT IGNORE`, jadi untuk entry yang sudah dikenal SFDB nilai yang
+  hidup adalah nilai SFDB. Versi pertama file perbaikannya melewatkan kelompok
+  ini karena lingkupnya memakai AND; sekarang OR.
+
+Sampai `prabowow_cataclysm_zone_loot_and_gold.sql` masuk, sebagian besar mob
+keempat zona di atas tidak menjatuhkan apa pun — bukan "loot-nya kosong", mayatnya tidak
 bisa diklik sama sekali. Sebabnya `lootid` dan `maxgold` sama-sama nol di dump
 4.3.4 dan ikut terbawa apa adanya; `Unit.cpp:6688` baru memasang
 `UNIT_DYNFLAG_LOOTABLE` kalau salah satunya bukan nol. Ukur dengan

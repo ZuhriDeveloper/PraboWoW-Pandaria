@@ -268,11 +268,11 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Mob Hyjal/Deepholm/Uldum/Twilight Highlands tidak drop apa pun, mayatnya tidak berkilau | `lootid` dan `maxgold` sama-sama nol di dump 4.3.4 dan ikut terbawa. Ukur dengan `audit_loot_coverage.sql` bagian 1, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` |
 | Mob Hyjal/Deepholm/Uldum/Twilight Highlands cuma menjatuhkan gold, tidak pernah ada item | Keadaan yang lain: `maxgold` > 0 sudah cukup membuat mayatnya berkilau, tapi `lootid` = 0 berarti tidak ada satu item pun. Berasal dari baris `creature_template` milik SFDB sendiri, bukan dari port. Ukur dengan `audit_loot_coverage.sql` bagian 1d dan 1e, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` yang sama |
 | Papan tugas tidak menawarkan quest Pandaria di level 85 | Bukan gerbang expansion — quest 29547/29611 memang tidak punya baris `gameobject_queststarter` di SFDB. Lihat `prabowow_pandaria_intro_board_and_travel.sql` |
-| Tidak ada portal ke Pandaria di Stormwind / Orgrimmar | Portalnya sebenarnya BERDIRI di kedua kota — SFDB memasangnya sejak rilis 10_to_11. Yang tidak ada itu tujuannya: spell di `data0` tidak punya baris `spell_target_position`. Ukur dengan `audit_pandaria_loot.sql` bagian 7, perbaiki dengan `prabowow_pandaria_city_portals.sql` |
+| Tidak ada portal ke Pandaria di Stormwind / Orgrimmar | Portalnya sebenarnya BERDIRI di kedua kota — SFDB memasangnya sejak rilis 10_to_11. Yang tidak ada itu tujuannya: spell di `data0` tidak punya baris `spell_target_position`. Ukur dengan `audit_pandaria_loot.sql` bagian 7, perbaiki dengan `2026_09_11_world_00.sql` (sudah dipromosikan, sudah jalan) |
 | Portal Pandaria diklik tapi pemain tidak pindah | Gejala yang sama persis dengan baris di atas, dan sebabnya juga sama. `spell_punya_tujuan` = 0 di bagian 7 audit memastikannya |
-| Portal Pandaria tenggelam separuh ke dalam tanah | Z di baris spawn SFDB persis setinggi tanah, dan `GameObject.cpp:179` memakainya apa adanya tanpa penyesuaian. Dinaikkan `@Z_LIFT` di bagian 3b `prabowow_pandaria_city_portals.sql`. Tinggi pastinya dicari di client — lihat "Menyetel tinggi portal" |
-| Portal Pandaria Orgrimmar menghadap arah yang salah | `rotation3` = 1 di baris SFDB membuat `UpdateRotationFields` (`GameObject.cpp:2192`) mengabaikan `orientation`, karena ia hanya menghitung sendiri kalau `rotation2` DAN `rotation3` dua-duanya nol. Bagian 3b menolkan keduanya. Hanya Orgrimmar yang kena — `orientation` Stormwind memang 0, jadi (0, 1) di sana kebetulan sudah benar |
-| Mob Pandaria terlalu tebal / lama dibunuh | `prabowow_pandaria_mob_health.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
+| Portal Pandaria tenggelam separuh ke dalam tanah | Z di baris spawn SFDB persis setinggi tanah, dan `GameObject.cpp:179` memakainya apa adanya tanpa penyesuaian. Dinaikkan `@Z_LIFT` di `prabowow_pandaria_city_portal_geometry.sql`, yang masih pending. Tinggi pastinya dicari di client — lihat "Menyetel tinggi portal" |
+| Portal Pandaria Orgrimmar menghadap arah yang salah | `rotation3` = 1 di baris SFDB membuat `UpdateRotationFields` (`GameObject.cpp:2192`) mengabaikan `orientation`, karena ia hanya menghitung sendiri kalau `rotation2` DAN `rotation3` dua-duanya nol. `prabowow_pandaria_city_portal_geometry.sql` menolkan keduanya. Hanya Orgrimmar yang kena — `orientation` Stormwind memang 0, jadi (0, 1) di sana kebetulan sudah benar |
+| Mob Pandaria terlalu tebal / lama dibunuh | `2026_09_11_world_01.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
 | Mob Pandaria tidak menjatuhkan apa pun | Jangan langsung menyalin solusi zona Cataclysm. Pandaria konten asli SFDB, bukan hasil port, jadi lootnya bisa saja utuh. Ukur dulu dengan `audit_pandaria_loot.sql` bagian 1 |
 
 ---
@@ -318,7 +318,7 @@ kondisi Mount Hyjal sebelum diport, dan artinya zona itu perlu port spawn.
 | 82-83 | Deepholm | Diport |
 | 83-84 | Uldum | Diport |
 | 84-85 | Twilight Highlands | Diport |
-| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest, dan portal ibu kotanya diperbaiki (`prabowow_pandaria_city_portals.sql`). Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
+| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest, dan portal ibu kotanya diperbaiki (`2026_09_11_world_00.sql`). Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
 
 **Drop mob zona hasil port.** File perbaikannya masih ada di
 `sql/pending_updates/world/`, dan `WorldDatabase.ImportPendingUpdates = 0` di
@@ -389,12 +389,27 @@ SFDB. Konfirmasi ke DB hidup dulu sebelum menyimpulkan apa pun.
 
 ### Portal, HP, dan loot Pandaria
 
-Tiga perubahan yang berdiri sendiri, semuanya di `sql/pending_updates/world/`
-repo core. Karena `WorldDatabase.ImportPendingUpdates = 0`, tidak satu pun jalan
-sendiri saat worldserver naik — lihat "Menjalankan file pending dengan tangan"
-di bawah.
+Tiga perubahan yang berdiri sendiri. Ketiganya **sudah dipromosikan** ke
+`sql/updates/world/` dan sudah jalan sendiri saat worldserver naik:
 
-**Portal ke Jade Forest** (`prabowow_pandaria_city_portals.sql`). Portalnya tidak
+| Dulu, saat masih pending | Sekarang, sesudah dipromosikan |
+|--------------------------|-------------------------------|
+| `prabowow_pandaria_city_portals.sql` | `2026_09_11_world_00.sql` |
+| `prabowow_pandaria_mob_health.sql` | `2026_09_11_world_01.sql` |
+| `prabowow_pandaria_mob_loot_and_gold.sql` | `2026_09_11_world_02.sql` |
+
+⚠️ **File yang sudah dipromosikan tidak boleh diubah lagi.** Hash isinya
+tercatat di `skyfire_db_updates`, dan `WorldDatabase.AllowUpdateHashMismatch = 0`
+di `config/worldserver.overrides.conf` membuat ketidakcocokan itu **fatal** —
+worldserver berhenti di `was already applied with a different hash` dan tidak
+pernah naik. Perbaikan susulan selalu masuk ke file pending BARU.
+
+Yang masih pending tinggal satu: `prabowow_pandaria_city_portal_geometry.sql`,
+perbaikan geometri portal di bawah. Karena
+`WorldDatabase.ImportPendingUpdates = 0`, ia tidak jalan sendiri — lihat
+"Menjalankan file pending dengan tangan" di bawah.
+
+**Portal ke Jade Forest** (`2026_09_11_world_00.sql`). Portalnya tidak
 pernah hilang: SFDB sudah memasang keduanya sejak rilis 10_to_11, dan keduanya
 memang berdiri di tempat yang benar.
 
@@ -424,7 +439,9 @@ satu baris error `sql.sql` di setiap boot.
 
 Baris spawn SFDB itu punya dua cacat lagi yang baru kelihatan begitu portalnya
 benar-benar dipakai: **tenggelam separuh ke tanah**, dan **menghadap arah yang
-salah**. Keduanya diperbaiki di bagian 3b file yang sama.
+salah**. Keduanya diperbaiki di `prabowow_pandaria_city_portal_geometry.sql`,
+file pending terpisah -- `2026_09_11_world_00.sql` sudah dipromosikan dan tidak
+boleh disentuh lagi.
 
 Arah hadapnya pasti benar sesudah perbaikan — `rotation2` dan `rotation3`
 dinolkan supaya core menghitungnya sendiri dari `orientation`. Tingginya tidak:
@@ -457,7 +474,7 @@ kembali. Yang memperbaikinya `.gobject turn`, yang memanggil
 `UpdateRotationFields()` tanpa argumen (`cs_gobject.cpp:406`) sehingga core
 menghitung ulang dari `orientation`. Atau cukup jalankan filenya.
 
-Karena itu bagian 3b memakai dua UPDATE dengan penjaga yang berbeda:
+Karena itu file geometrinya memakai dua UPDATE dengan penjaga yang berbeda:
 
 | Yang diperbaiki | Penjaganya | Akibatnya |
 |-----------------|------------|-----------|
@@ -468,7 +485,7 @@ Penjaga tingginya sengaja **bukan** rotasi. Versi pertama file ini memakai sidik
 jari `rotation3` = 1 dengan anggapan `.gobject move` akan menghapusnya — anggapan
 yang salah, dan akibatnya Z akan naik dua kali di atas posisi yang sudah benar.
 
-**HP mob Pandaria** (`prabowow_pandaria_mob_health.sql`). Menurunkan
+**HP mob Pandaria** (`2026_09_11_world_01.sql`). Menurunkan
 `creature_template`.`Health_mod` map 870 jadi 30% dari aslinya, semua rank
 termasuk world boss. Rate di config tidak bisa dipakai untuk ini: ia berlaku
 untuk seluruh realm dan tidak punya varian per-map.
@@ -492,7 +509,7 @@ SET `ct`.`Health_mod` = `b`.`health_mod_asli`;
 HP dipasang saat creature di-spawn, jadi mob yang sudah berdiri tetap tebal
 sampai ia mati dan respawn, atau sampai world restart.
 
-**Loot mob Pandaria** (`prabowow_pandaria_mob_loot_and_gold.sql`). ⚠️ Ini
+**Loot mob Pandaria** (`2026_09_11_world_02.sql`). ⚠️ Ini
 satu-satunya dari ketiganya yang **belum diukur ke DB hidup**, dan ia mungkin
 benar-benar tidak perlu dijalankan.
 
@@ -527,26 +544,26 @@ jadi isi `sql/pending_updates/world/` **tidak pernah** jalan sendiri. Selama
 belum dipromosikan ke `sql/updates/world/`, satu-satunya cara menerapkannya ke
 DB yang sedang jalan adalah dengan tangan.
 
-Backup dulu — ketiganya menulis ke `creature_template`, tabel terbesar di world
-DB:
+Ketiga file Pandaria di atas sudah dipromosikan, jadi worldserver yang
+menerapkannya sendiri. Yang tersisa untuk dijalankan dengan tangan cuma
+perbaikan geometri portal.
+
+Backup dulu:
 
 ```bash
 ./scripts/backup-db.sh
 ```
 
-Lalu, urut, dan baca keluaran tiap file sebelum lanjut ke berikutnya:
+Lalu jalankan, dan baca laporan di keluarannya:
 
 ```bash
 docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
-    < prabowow_pandaria_city_portals.sql
-docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
-    < prabowow_pandaria_mob_health.sql
-docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
-    < prabowow_pandaria_mob_loot_and_gold.sql
+    < prabowow_pandaria_city_portal_geometry.sql
 ```
 
-Ketiganya idempotent — aman diulang. Sesudahnya world perlu restart supaya
-`creature_template` dan `gameobject_template` dibaca ulang:
+File itu idempotent — aman diulang, dan penjaganya membuat ia tidak menimpa
+portal yang sudah kamu pindahkan dengan tangan. Sesudahnya world perlu restart
+supaya `gameobject` dibaca ulang:
 
 ```bash
 docker compose $PW restart world

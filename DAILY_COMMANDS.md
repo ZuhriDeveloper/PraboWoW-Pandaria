@@ -268,9 +268,14 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Mob Hyjal/Deepholm/Uldum/Twilight Highlands tidak drop apa pun, mayatnya tidak berkilau | `lootid` dan `maxgold` sama-sama nol di dump 4.3.4 dan ikut terbawa. Ukur dengan `audit_loot_coverage.sql` bagian 1, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` |
 | Mob Hyjal/Deepholm/Uldum/Twilight Highlands cuma menjatuhkan gold, tidak pernah ada item | Keadaan yang lain: `maxgold` > 0 sudah cukup membuat mayatnya berkilau, tapi `lootid` = 0 berarti tidak ada satu item pun. Berasal dari baris `creature_template` milik SFDB sendiri, bukan dari port. Ukur dengan `audit_loot_coverage.sql` bagian 1d dan 1e, perbaiki dengan `prabowow_cataclysm_zone_loot_and_gold.sql` yang sama |
 | Papan tugas tidak menawarkan quest Pandaria di level 85 | Bukan gerbang expansion — quest 29547/29611 memang tidak punya baris `gameobject_queststarter` di SFDB. Lihat `prabowow_pandaria_intro_board_and_travel.sql` |
-| Tidak ada portal ke Pandaria di Stormwind / Orgrimmar | Portalnya sebenarnya BERDIRI di kedua kota — SFDB memasangnya sejak rilis 10_to_11. Yang tidak ada itu tujuannya: spell di `data0` tidak punya baris `spell_target_position`. Ukur dengan `audit_pandaria_loot.sql` bagian 7, perbaiki dengan `prabowow_pandaria_city_portals.sql` |
+| Tidak ada portal ke Pandaria di Stormwind / Orgrimmar | Portalnya sebenarnya BERDIRI di kedua kota — SFDB memasangnya sejak rilis 10_to_11. Yang tidak ada itu tujuannya: spell di `data0` tidak punya baris `spell_target_position`. Ukur dengan `audit_pandaria_loot.sql` bagian 7, perbaiki dengan `2026_09_11_world_00.sql` (sudah dipromosikan, sudah jalan) |
 | Portal Pandaria diklik tapi pemain tidak pindah | Gejala yang sama persis dengan baris di atas, dan sebabnya juga sama. `spell_punya_tujuan` = 0 di bagian 7 audit memastikannya |
-| Mob Pandaria terlalu tebal / lama dibunuh | `prabowow_pandaria_mob_health.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
+| Portal Pandaria tenggelam separuh ke dalam tanah | Z di baris spawn SFDB persis setinggi tanah, dan `GameObject.cpp:179` memakainya apa adanya tanpa penyesuaian. Dinaikkan `@Z_LIFT` di `2026_09_12_world_00.sql` (sudah dipromosikan). Tinggi pastinya dicari di client — lihat "Menyetel tinggi portal" |
+| Portal Pandaria Orgrimmar menghadap arah yang salah | `rotation3` = 1 di baris SFDB membuat `UpdateRotationFields` (`GameObject.cpp:2192`) mengabaikan `orientation`, karena ia hanya menghitung sendiri kalau `rotation2` DAN `rotation3` dua-duanya nol. `2026_09_12_world_00.sql` menolkan keduanya. Hanya Orgrimmar yang kena — `orientation` Stormwind memang 0, jadi (0, 1) di sana kebetulan sudah benar |
+| Quest "The King's Command" / "The Art of War" diambil tapi tidak pernah bisa diserahkan | Tiga cacat sekaligus, semuanya di data: 29547 tidak punya penutup sama sekali, objective-nya tipe 0 yang cuma bisa dikredit lewat `KilledMonsterCredit`, dan kredit yang SFDB pasang menempel di NPC yang melayang di udara. Perbaikannya `prabowow_pandaria_intro_chain.sql` — lihat "Rantai quest intro Pandaria" |
+| "The Mission" / "All Aboard!" minta naik kapal yang tidak bisa dinaiki | Skyfire dan kapal Horde bukan transport di DB ini, cuma kru yang diparkir di ketinggian 358 (map 0) dan 443 (map 1). Sesudah `prabowow_pandaria_intro_chain.sql`, menerima quest-nya langsung memindahkan pemain ke titik mendarat Jade Forest — pola yang sama dengan Emissary Windsong di Hyjal |
+| Quest "Unleash Hell" / "Paint it Red!" mentok di Jade Forest | Memang belum bisa selesai dan bukan bug baru: objective-nya bunny kredit tanpa spawn plus mob di phase 1740 yang tidak bisa dimasuki pemain. Tidak ada satu quest pun yang menjadikannya PrevQuestId, jadi questline Jade Forest tetap terbuka — tinggalkan saja di log |
+| Mob Pandaria terlalu tebal / lama dibunuh | `2026_09_11_world_01.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
 | Mob Pandaria tidak menjatuhkan apa pun | Jangan langsung menyalin solusi zona Cataclysm. Pandaria konten asli SFDB, bukan hasil port, jadi lootnya bisa saja utuh. Ukur dulu dengan `audit_pandaria_loot.sql` bagian 1 |
 
 ---
@@ -316,7 +321,7 @@ kondisi Mount Hyjal sebelum diport, dan artinya zona itu perlu port spawn.
 | 82-83 | Deepholm | Diport |
 | 83-84 | Uldum | Diport |
 | 84-85 | Twilight Highlands | Diport |
-| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest, dan portal ibu kotanya diperbaiki (`prabowow_pandaria_city_portals.sql`). Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
+| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest, portal ibu kotanya diperbaiki (`2026_09_11_world_00.sql` + `2026_09_12_world_00.sql`), dan rantai quest intronya bisa diselesaikan sampai pemain berdiri di Pandaria (`prabowow_pandaria_intro_chain.sql`, masih pending). Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
 
 **Drop mob zona hasil port.** File perbaikannya masih ada di
 `sql/pending_updates/world/`, dan `WorldDatabase.ImportPendingUpdates = 0` di
@@ -387,12 +392,28 @@ SFDB. Konfirmasi ke DB hidup dulu sebelum menyimpulkan apa pun.
 
 ### Portal, HP, dan loot Pandaria
 
-Tiga perubahan yang berdiri sendiri, semuanya di `sql/pending_updates/world/`
-repo core. Karena `WorldDatabase.ImportPendingUpdates = 0`, tidak satu pun jalan
-sendiri saat worldserver naik — lihat "Menjalankan file pending dengan tangan"
-di bawah.
+Empat perubahan yang berdiri sendiri. Keempatnya **sudah dipromosikan** ke
+`sql/updates/world/` dan sudah jalan sendiri saat worldserver naik:
 
-**Portal ke Jade Forest** (`prabowow_pandaria_city_portals.sql`). Portalnya tidak
+| Dulu, saat masih pending | Sekarang, sesudah dipromosikan |
+|--------------------------|-------------------------------|
+| `prabowow_pandaria_city_portals.sql` | `2026_09_11_world_00.sql` |
+| `prabowow_pandaria_mob_health.sql` | `2026_09_11_world_01.sql` |
+| `prabowow_pandaria_mob_loot_and_gold.sql` | `2026_09_11_world_02.sql` |
+| `prabowow_pandaria_city_portal_geometry.sql` | `2026_09_12_world_00.sql` |
+
+⚠️ **File yang sudah dipromosikan tidak boleh diubah lagi.** Hash isinya
+tercatat di `skyfire_db_updates`, dan `WorldDatabase.AllowUpdateHashMismatch = 0`
+di `config/worldserver.overrides.conf` membuat ketidakcocokan itu **fatal** —
+worldserver berhenti di `was already applied with a different hash` dan tidak
+pernah naik. Perbaikan susulan selalu masuk ke file pending BARU.
+
+Perbaikan geometri portal ikut menyusul: `2026_09_12_world_00.sql`. Yang masih
+pending tinggal satu, `prabowow_pandaria_intro_chain.sql` — rantai quest
+intronya, di bawah. Karena `WorldDatabase.ImportPendingUpdates = 0`, ia tidak
+jalan sendiri — lihat "Menjalankan file pending dengan tangan" di bawah.
+
+**Portal ke Jade Forest** (`2026_09_11_world_00.sql`). Portalnya tidak
 pernah hilang: SFDB sudah memasang keduanya sejak rilis 10_to_11, dan keduanya
 memang berdiri di tempat yang benar.
 
@@ -418,7 +439,56 @@ keluarnya: effIndex-nya ada di `Spell.dbc`, bukan di DB (130321 memakai 0,
 125060 memakai 1), jadi ia tidak bisa diturunkan dari SQL dan menebak berarti
 satu baris error `sql.sql` di setiap boot.
 
-**HP mob Pandaria** (`prabowow_pandaria_mob_health.sql`). Menurunkan
+#### Menyetel tinggi portal
+
+Baris spawn SFDB itu punya dua cacat lagi yang baru kelihatan begitu portalnya
+benar-benar dipakai: **tenggelam separuh ke tanah**, dan **menghadap arah yang
+salah**. Keduanya diperbaiki di `2026_09_12_world_00.sql`, file terpisah --
+`2026_09_11_world_00.sql` sudah dipromosikan dan tidak boleh disentuh lagi.
+
+Arah hadapnya pasti benar sesudah perbaikan — `rotation2` dan `rotation3`
+dinolkan supaya core menghitungnya sendiri dari `orientation`. Tingginya tidak:
+`@Z_LIFT` = 2.0 itu **perkiraan**, karena tinggi pivot model 12658 ada di
+`GameObjectDisplayInfo.dbc` dan tidak bisa dibaca dari SQL.
+
+Angka pastinya dicari di client, dan hasilnya langsung tersimpan sendiri —
+`.gobject move` memanggil `SaveToDB()` di akhir:
+
+```
+.gobject near 30
+```
+
+```
+.gobject move <guid> <x> <y> <z>
+```
+
+Kalau sudah pas, baca balik posisinya, kurangi dengan Z tanah (28.62439 di
+Orgrimmar, 117.2901 di Stormwind), lalu tulis selisihnya ke `@Z_LIFT` supaya DB
+yang dibangun dari nol nanti ikut benar:
+
+```bash
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world -e "SELECT guid, id, map, position_x, position_y, position_z, orientation, rotation2, rotation3 FROM gameobject WHERE id IN (215424, 215457);"
+```
+
+⚠️ **`.gobject move` tidak memperbaiki arah hadap.** `SaveToDB`
+(`GameObject.cpp:742-743`) menulis rotasi dari nilai yang sedang berlaku, dan
+nilai itu (0, 1) yang keliru tadi — jadi memindahkan portal justru menyimpannya
+kembali. Yang memperbaikinya `.gobject turn`, yang memanggil
+`UpdateRotationFields()` tanpa argumen (`cs_gobject.cpp:406`) sehingga core
+menghitung ulang dari `orientation`. Atau cukup jalankan filenya.
+
+Karena itu file geometrinya memakai dua UPDATE dengan penjaga yang berbeda:
+
+| Yang diperbaiki | Penjaganya | Akibatnya |
+|-----------------|------------|-----------|
+| Rotasi | `rotation2` atau `rotation3` belum nol | Selalu benar, aman diulang, aman juga sesudah `.gobject turn` |
+| Tinggi | Z masih persis nilai asli SFDB (toleransi 0.05) | Naik tepat sekali; portal yang sudah kamu pindahkan tangan **tidak** akan ditimpa |
+
+Penjaga tingginya sengaja **bukan** rotasi. Versi pertama file ini memakai sidik
+jari `rotation3` = 1 dengan anggapan `.gobject move` akan menghapusnya — anggapan
+yang salah, dan akibatnya Z akan naik dua kali di atas posisi yang sudah benar.
+
+**HP mob Pandaria** (`2026_09_11_world_01.sql`). Menurunkan
 `creature_template`.`Health_mod` map 870 jadi 30% dari aslinya, semua rank
 termasuk world boss. Rate di config tidak bisa dipakai untuk ini: ia berlaku
 untuk seluruh realm dan tidak punya varian per-map.
@@ -442,7 +512,7 @@ SET `ct`.`Health_mod` = `b`.`health_mod_asli`;
 HP dipasang saat creature di-spawn, jadi mob yang sudah berdiri tetap tebal
 sampai ia mati dan respawn, atau sampai world restart.
 
-**Loot mob Pandaria** (`prabowow_pandaria_mob_loot_and_gold.sql`). ⚠️ Ini
+**Loot mob Pandaria** (`2026_09_11_world_02.sql`). ⚠️ Ini
 satu-satunya dari ketiganya yang **belum diukur ke DB hidup**, dan ia mungkin
 benar-benar tidak perlu dijalankan.
 
@@ -470,6 +540,91 @@ Kalaupun dijalankan tanpa diukur, file itu self-scoping: ia menghitung lingkupny
 dari DB tempat ia dijalankan dan tidak menyentuh satu baris pun kalau tidak ada
 yang rusak. Laporan di bagian 7 file itu yang memberi tahu mana yang terjadi.
 
+### Rantai quest intro Pandaria
+
+`prabowow_pandaria_intro_chain.sql`, masih pending. Quest intronya sudah sampai
+ke papan tugas sejak `2026_09_10_world_01.sql`, tapi rantai di belakangnya tidak
+jalan: quest diambil, lalu berhenti di situ selamanya.
+
+| | Alliance | Horde |
+|---|---|---|
+| Breadcrumb papan | 29547 The King's Command | 29611/29612 The Art of War |
+| Lanjutannya | 29548 The Mission | 31853 All Aboard! |
+| Sesudah itu | 31732 Unleash Hell | 29690 Into the Mists → 31765 Paint it Red! |
+
+Rantainya lewat `NextQuestIdChain`; `PrevQuestId` nol di semuanya, jadi tidak
+ada yang saling mengunci.
+
+**Empat cacat, semuanya di data.**
+
+1. 29547 **tidak punya penutup sama sekali** — bukan creature, bukan
+   gameobject. Satu-satunya quest di rantai itu yang begitu.
+2. Semua objective di rantai ini `quest_objective`.`type` = 0
+   (`QUEST_OBJECTIVE_TYPE_NPC`), dan core ini cuma mengkreditnya dari
+   `Player::KilledMonsterCredit` (`PlayerQuestState.cpp:1850`).
+   `Player::TalkedToCreature` (`:2004`) hanya melayani tipe 3
+   (`NPC_INTERACT`). Jadi "Stormwind Keep visited" dan "Report to Grommash
+   Hold" **tidak bisa** didapat dengan masuk ruangannya atau mengajak bicara —
+   keduanya butuh kill credit, dan tidak ada satu pun di DB yang memicunya.
+   Bunny 55567 bahkan tidak punya spawn.
+3. SFDB sebenarnya sudah memasang dua kreditnya — tapi di NPC yang tidak bisa
+   didatangi. Sky Admiral Rogers (66292) dan General Nazgrim (55054) punya
+   script gossip-select yang mengkredit objective lalu memindahkan pemain ke
+   Pandaria (itulah tumpangan gunship/kapal versi retail). Rogers berdiri di
+   dek Skyfire pada `(-7879.8, 1279.5, 358.6)` map 0, Nazgrim pada
+   `(1862.3, -5461.9, 443.8)` map 1. Dua-duanya melayang di atas ibu kota, dan
+   kapalnya bukan transport di DB ini — cuma kru yang diparkir, 74 NPC di dek
+   Skyfire, semuanya phase 0.
+4. Penutup 31853 dan pemberi 29690 adalah Nazgrim yang melayang itu juga, jadi
+   rantai Horde tetap buntu walau kreditnya sudah jalan. Alliance lebih
+   beruntung: Rogers punya spawn kedua tanpa phase di
+   `(-664.9, -1483.3, 130.2)` map 870, empat yard dari titik mendarat portal.
+
+**Perbaikannya** mengikuti bentuk yang sama dengan breadcrumb Hyjal di
+`2026_09_09_world_07.sql` — penerbangan yang tidak bisa diport diganti teleport
+saat quest diterima:
+
+- Rell Nightwind menutup "The King's Command" di Stormwind Keep, dan mengkredit
+  "Stormwind Keep visited" begitu diajak bicara. Ia sudah jadi pemberi "The
+  Mission", jadi serah-terima dan quest berikutnya terjadi dalam satu jendela.
+- Menerima "The Mission" dari Rell memindahkan pemain ke Jade Forest, di
+  sebelah Sky Admiral Rogers. Itu tumpangan Skyfire-nya.
+- General Nazgrim di Grommash Hold mengkredit "Report to Grommash Hold" saat
+  disapa, dan menerima "All Aboard!" darinya memindahkan pemain ke titik
+  mendarat Horde. Itu kapalnya.
+- General Nazgrim di titik mendarat (55135) juga menutup "All Aboard!", memberi
+  "Into the Mists", dan mengkredit "Discovered Pandaria" — yang memang benar,
+  pemainnya sedang berdiri di Pandaria.
+
+Titik mendaratnya bukan tebakan: itu tujuan spell tumpangan milik SFDB sendiri,
+dibaca dari `spell_target_position` (130321 Alliance, 125060 Horde), pasangan
+yang sama dengan yang dipakai Pandaria Emissary.
+
+`npcflag` tidak diubah. Rell (55789) dan kedua Nazgrim (54870, 55135) itu
+npcflag 2 — questgiver tanpa bit gossip — jadi client mengirim
+`CMSG_QUEST_GIVER_HELLO`, bukan gossip hello. Jalur itu tetap memanggil hook
+AI-nya: `QuestHandler.cpp:147` memanggil `OnGossipHello()` sebelum menyusun menu
+quest, dan `SmartAI::OnGossipHello` (`SmartAI.cpp:732`) memicu
+`SMART_EVENT_GOSSIP_HELLO` lalu mengembalikan `_gossipReturn`, yang tidak pernah
+diset `true` oleh apa pun di `SmartScript`. Kreditnya masuk lebih dulu, tanda
+serah-terimanya muncul di jendela yang sama.
+
+**Di mana ia berhenti, dan kenapa.** Quest yang dipegang pemain di ujungnya —
+31732 Unleash Hell (Alliance) dan 31765 Paint it Red! (Horde) — adalah
+pertempuran gunship yang di retail seluruhnya script C++, dan itu tidak bisa
+diperbaiki dari data. 31732 menuntut dua kill credit (66400 Bladefist Reaper,
+66401 Stygian Scar) yang tidak punya spawn, dan dua objective yang bisa dibunuh
+(66398, 66397) cuma ada di phase 1740 — phase yang tidak bisa dimasuki pemain,
+karena core ini hanya memberi phase dari aura, spell dan SmartAI, sementara
+`phase_area` (`ObjectMgr.cpp:9045`) dibaca **hanya** untuk mencegah phase
+dilepas. Objective 31733, 31765, 31766, 31767 dan 31769 semuanya bunny kredit
+tanpa spawn juga.
+
+Tidak ada yang hilang karena berhenti di sini: **tidak ada satu quest pun di
+seluruh DB yang menjadikan rantai ini `PrevQuestId`**, dan 136 dari 150 quest
+Jade Forest punya pemberi yang tidak di-phase. Questline zonanya terbuka penuh
+tanpa rantai intro ini.
+
 ### Menjalankan file pending dengan tangan
 
 `WorldDatabase.ImportPendingUpdates = 0` di `config/worldserver.overrides.conf`,
@@ -477,30 +632,36 @@ jadi isi `sql/pending_updates/world/` **tidak pernah** jalan sendiri. Selama
 belum dipromosikan ke `sql/updates/world/`, satu-satunya cara menerapkannya ke
 DB yang sedang jalan adalah dengan tangan.
 
-Backup dulu — ketiganya menulis ke `creature_template`, tabel terbesar di world
-DB:
+Empat file Pandaria di atas sudah dipromosikan, jadi worldserver yang
+menerapkannya sendiri. Yang tersisa untuk dijalankan dengan tangan cuma
+rantai quest intronya.
+
+Backup dulu:
 
 ```bash
 ./scripts/backup-db.sh
 ```
 
-Lalu, urut, dan baca keluaran tiap file sebelum lanjut ke berikutnya:
+Lalu jalankan, dan baca laporan di keluarannya:
 
 ```bash
 docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
-    < prabowow_pandaria_city_portals.sql
-docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
-    < prabowow_pandaria_mob_health.sql
-docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
-    < prabowow_pandaria_mob_loot_and_gold.sql
+    < prabowow_pandaria_intro_chain.sql
 ```
 
-Ketiganya idempotent — aman diulang. Sesudahnya world perlu restart supaya
-`creature_template` dan `gameobject_template` dibaca ulang:
+File itu idempotent — ia cuma menghapus dan menulis ulang baris miliknya
+sendiri, per pasangan `(id, quest)`, jadi relasi quest SFDB untuk quest yang
+sama ikut selamat dan ketiga baris `smart_scripts` milik Sky Admiral Rogers
+tidak tersentuh. Sesudahnya world perlu restart, karena `AIName` baru dibaca
+saat creature-nya dibuat:
 
 ```bash
 docker compose $PW restart world
 ```
+
+Tanpa restart, `.reload creature_questender`, `.reload creature_queststarter`
+dan `.reload smart_scripts` sudah memasang relasi dan script-nya, tapi keempat
+NPC itu tetap tanpa AI sampai mereka dibuat ulang.
 
 Portal langsung terasa sesudah restart. HP baru terasa pada mob yang respawn.
 

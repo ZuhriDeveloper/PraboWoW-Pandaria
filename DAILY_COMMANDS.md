@@ -271,7 +271,7 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Tidak ada portal ke Pandaria di Stormwind / Orgrimmar | Portalnya sebenarnya BERDIRI di kedua kota — SFDB memasangnya sejak rilis 10_to_11. Yang tidak ada itu tujuannya: spell di `data0` tidak punya baris `spell_target_position`. Ukur dengan `audit_pandaria_loot.sql` bagian 7, perbaiki dengan `prabowow_pandaria_city_portals.sql` |
 | Portal Pandaria diklik tapi pemain tidak pindah | Gejala yang sama persis dengan baris di atas, dan sebabnya juga sama. `spell_punya_tujuan` = 0 di bagian 7 audit memastikannya |
 | Portal Pandaria tenggelam separuh ke dalam tanah | Z di baris spawn SFDB persis setinggi tanah, dan `GameObject.cpp:179` memakainya apa adanya tanpa penyesuaian. Dinaikkan `@Z_LIFT` di bagian 3b `prabowow_pandaria_city_portals.sql`. Tinggi pastinya dicari di client — lihat "Menyetel tinggi portal" |
-| Portal Pandaria menghadap arah yang salah | `rotation3` = 1 di baris SFDB membuat `UpdateRotationFields` (`GameObject.cpp:2192`) mengabaikan `orientation`, karena ia hanya menghitung sendiri kalau `rotation2` DAN `rotation3` dua-duanya nol. Bagian 3b menolkan keduanya |
+| Portal Pandaria Orgrimmar menghadap arah yang salah | `rotation3` = 1 di baris SFDB membuat `UpdateRotationFields` (`GameObject.cpp:2192`) mengabaikan `orientation`, karena ia hanya menghitung sendiri kalau `rotation2` DAN `rotation3` dua-duanya nol. Bagian 3b menolkan keduanya. Hanya Orgrimmar yang kena — `orientation` Stormwind memang 0, jadi (0, 1) di sana kebetulan sudah benar |
 | Mob Pandaria terlalu tebal / lama dibunuh | `prabowow_pandaria_mob_health.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
 | Mob Pandaria tidak menjatuhkan apa pun | Jangan langsung menyalin solusi zona Cataclysm. Pandaria konten asli SFDB, bukan hasil port, jadi lootnya bisa saja utuh. Ukur dulu dengan `audit_pandaria_loot.sql` bagian 1 |
 
@@ -450,10 +450,23 @@ yang dibangun dari nol nanti ikut benar:
 docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world -e "SELECT guid, id, map, position_x, position_y, position_z, orientation, rotation2, rotation3 FROM gameobject WHERE id IN (215424, 215457);"
 ```
 
-Kedua UPDATE di bagian 3b dijaga sidik jari `rotation2` = 0 **dan** `rotation3`
-= 1 — tanda baris SFDB yang belum pernah disentuh. Jadi portalnya tidak akan
-naik berlipat kalau filenya dijalankan ulang, dan posisi yang sudah kamu setel
-sendiri lewat `.gobject move` tidak akan ditimpa.
+⚠️ **`.gobject move` tidak memperbaiki arah hadap.** `SaveToDB`
+(`GameObject.cpp:742-743`) menulis rotasi dari nilai yang sedang berlaku, dan
+nilai itu (0, 1) yang keliru tadi — jadi memindahkan portal justru menyimpannya
+kembali. Yang memperbaikinya `.gobject turn`, yang memanggil
+`UpdateRotationFields()` tanpa argumen (`cs_gobject.cpp:406`) sehingga core
+menghitung ulang dari `orientation`. Atau cukup jalankan filenya.
+
+Karena itu bagian 3b memakai dua UPDATE dengan penjaga yang berbeda:
+
+| Yang diperbaiki | Penjaganya | Akibatnya |
+|-----------------|------------|-----------|
+| Rotasi | `rotation2` atau `rotation3` belum nol | Selalu benar, aman diulang, aman juga sesudah `.gobject turn` |
+| Tinggi | Z masih persis nilai asli SFDB (toleransi 0.05) | Naik tepat sekali; portal yang sudah kamu pindahkan tangan **tidak** akan ditimpa |
+
+Penjaga tingginya sengaja **bukan** rotasi. Versi pertama file ini memakai sidik
+jari `rotation3` = 1 dengan anggapan `.gobject move` akan menghapusnya — anggapan
+yang salah, dan akibatnya Z akan naik dua kali di atas posisi yang sudah benar.
 
 **HP mob Pandaria** (`prabowow_pandaria_mob_health.sql`). Menurunkan
 `creature_template`.`Health_mod` map 870 jadi 30% dari aslinya, semua rank

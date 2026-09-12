@@ -277,6 +277,8 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Quest "Unleash Hell" / "Paint it Red!" mentok di Jade Forest | Memang belum bisa selesai dan bukan bug baru: objective-nya bunny kredit tanpa spawn plus mob di phase 1740 yang tidak bisa dimasuki pemain. Tidak ada satu quest pun yang menjadikannya PrevQuestId, jadi questline Jade Forest tetap terbuka — tinggalkan saja di log |
 | Mob Pandaria terlalu tebal / lama dibunuh | `2026_09_11_world_01.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
 | Mob Pandaria tidak menjatuhkan apa pun | Jangan langsung menyalin solusi zona Cataclysm. Pandaria konten asli SFDB, bukan hasil port, jadi lootnya bisa saja utuh. Ukur dulu dengan `audit_pandaria_loot.sql` bagian 1 |
+| Teleport mage cast-nya jalan tapi pemain tidak pindah | Baris `spell_target_position` untuk spell itu tidak ada di dump SFDB, dan `Spell.cpp:1400-1416` diam-diam memakai posisi pemain sendiri sebagai tujuan. Enam tujuan yang hilang diisi `prabowow_mage_teleport_target_positions.sql` — lihat "Teleport mage dan Roll monk" |
+| Roll monk tidak menggerakkan karakter | Bukan data: `spell_monk_roll` memang tidak pernah memanggil API gerak apa pun, seluruh geraknya diserahkan ke efek DBC yang core ini tidak proses. Perbaikannya di C++, jadi butuh build CI dan deploy image baru |
 
 ---
 
@@ -409,7 +411,7 @@ worldserver berhenti di `was already applied with a different hash` dan tidak
 pernah naik. Perbaikan susulan selalu masuk ke file pending BARU.
 
 Perbaikan geometri portal ikut menyusul: `2026_09_12_world_00.sql`. Yang masih
-pending tinggal satu, `prabowow_pandaria_intro_chain.sql` — rantai quest
+pending dari rangkaian ini tinggal satu, `prabowow_pandaria_intro_chain.sql` — rantai quest
 intronya, di bawah. Karena `WorldDatabase.ImportPendingUpdates = 0`, ia tidak
 jalan sendiri — lihat "Menjalankan file pending dengan tangan" di bawah.
 
@@ -625,6 +627,100 @@ seluruh DB yang menjadikan rantai ini `PrevQuestId`**, dan 136 dari 150 quest
 Jade Forest punya pemberi yang tidak di-phase. Questline zonanya terbuka penuh
 tanpa rantai intro ini.
 
+### Teleport mage dan Roll monk
+
+Dua skill yang rusak karena dua sebab yang sama sekali berbeda. Yang satu data
+yang hilang di DB, yang satu kode yang memang tidak pernah ada.
+
+**Teleport mage** (`prabowow_mage_teleport_target_positions.sql`, masih pending).
+Mage Alliance cuma bisa Teleport ke Stormwind dan Exodar; tujuan lain cast-nya
+selesai, animasinya jalan, cooldown-nya jalan, tapi pemain tetap berdiri di
+tempat yang sama.
+
+Spell Teleport memakai target `TARGET_DEST_DB`: koordinatnya bukan di DBC,
+melainkan di tabel `spell_target_position`. Kalau barisnya tidak ada,
+`Spell::SelectImplicitCasterDestTargets` (`Spell.cpp:1400-1416`) **tidak**
+menggagalkan cast — ia memakai posisi pemain sendiri sebagai tujuan. Diamnya
+total: pengecekan kelengkapan saat boot dikomentari (`SpellMgr.cpp:1585-1616`)
+dan miss saat cast cuma `SF_LOG_DEBUG`. Yang berisik justru baris yang ADA tapi
+salah, bukan yang hilang — itu sebabnya cacat ini bertahan lama.
+
+Dump dasar SFDB memang bolong. Enam yang tidak punya tujuan:
+
+| Spell | Tujuan | Map | Koordinat |
+|-------|--------|-----|-----------|
+| 3562 | Teleport: Ironforge | 0 | -4613.71, -915.287, 501.062, o 0 |
+| 3565 | Teleport: Darnassus | 1 | 9656.54, 2518.26, 1331.66, o 0 |
+| 3566 | Teleport: Thunder Bluff | 1 | -967.375, 284.82, 110.773, o 3.19999 |
+| 49359 | Teleport: Theramore | 1 | -3748.11, -4440.21, 30.5688, o 3.95172 |
+| 88342 | Teleport: Tol Barad (A) | 732 | -369.208, 1058.73, 21.7719, o 0.634577 |
+| 88344 | Teleport: Tol Barad (H) | 732 | -603.724, 1387.62, 22.0498, o 0.469644 |
+
+Angkanya bukan tebakan. Dua sumber yang tidak berhubungan sepakat sampai digit
+terakhir, termasuk `effIndex` yang semuanya 0: tabel `spell_target_position`
+di dump world TrinityCore 4.3.4, dan baris "Portal Effect" MoP milik SFDB
+sendiri (121849 Darnassus, 121851 Ironforge, 121858 Theramore, 121859 Thunder
+Bluff, 121860/121861 Tol Barad) — yaitu titik mendarat portal grup yang sekarang
+sudah jalan. Wajar keduanya sama: Teleport dan Portal ke kota yang sama memang
+mendarat di titik yang sama.
+
+Karena itu jalan buntu yang dulu membuat `2026_09_11_world_00.sql` **menolak**
+menambah baris `spell_target_position` tidak berlaku di sini. Di sana
+`effIndex`-nya harus ditebak; di sini terbaca dari data.
+
+Spell **Portal** grup sengaja tidak disentuh: rantai portal MoP tidak lewat
+spell itu, melainkan lewat "Portal Effect" 121847-121862 yang barisnya sudah
+lengkap.
+
+Verifikasinya berlapis. Sebelum dan sesudah, lihat isinya sendiri:
+
+```bash
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world -e "SELECT id, effIndex, target_map, target_position_x, target_position_y, target_position_z, target_orientation FROM spell_target_position WHERE id IN (3561,3562,3563,3565,3566,3567,32271,32272,33690,35715,49358,49359,53140,88342,88344,89597) ORDER BY id;"
+```
+
+Lalu, sesudah restart, dua hal di log: `>> Loaded N spell teleport coordinates`
+(`SpellMgr.cpp:1617`) naik enam, dan `sql.sql` bersih dari
+`does not have target TARGET_DEST_DB (17)` (`SpellMgr.cpp:1578`). Baris itulah
+jaring pengamannya — kalau `effIndex` sebuah baris keliru, ia berteriak setiap
+boot, bukan diam. Terakhir di game: Teleport ke Ironforge, Darnassus, Theramore
+dan Tol Barad, dengan Stormwind sebagai pembanding yang memang sudah jalan.
+
+**Roll monk** (core PR, bukan SQL). `spell_monk_roll` cuma memasang aura 107427
+dan menyerahkan seluruh gerakan ke efek DBC yang core ini tidak proses sama
+sekali — jadi cast selesai, animasi guling jalan, monk-nya diam di tempat.
+
+Perbaikannya di C++: script-nya sekarang menggerakkan sendiri, pola yang sama
+dengan Heroic Leap dan Shadowstep di fork ini. Jarak, kecepatan dan arah tinggal
+di `SpellMovementMetadata` sebagai fungsi murni supaya ikut teruji
+`game_domain_tests` tanpa server. Arahnya mengikuti tombol yang ditekan (mundur
+menang atas strafe), dan `GetFirstCollisionPosition` menahannya di dinding.
+
+Dipakai `MoveJump`, bukan `MoveCharge`: `MoveCharge` (`MotionMaster.cpp:395`)
+diam-diam `return` kalau `MOTION_SLOT_CONTROLLED` sedang terpakai — persis cara
+gerakan itu hilang lagi tanpa jejak.
+
+Karena ini C++, ia **tidak** bisa diterapkan lewat SQL: butuh build CI lalu
+image baru (`gh workflow run deploy.yml`). Chi Torpedo bentuknya sama persis dan
+kemungkinan besar rusak dengan cara yang sama, tapi sengaja belum ikut — daftar
+spell yang sudah bisa bergerak sendiri akan membuat pemainnya terlempar dua kali.
+Uji dulu di game, baru tambahkan.
+
+### Mencari id spell dari DBC
+
+Berulang kali mentok di hal yang sama: `effIndex`, nama, dan id spell ada di
+`Spell.dbc`, tidak di SQL, jadi tidak bisa dibaca lewat query. Jalan keluarnya
+GM command, yang memang membaca DBC:
+
+```
+.lookup spell Teleport: Ironforge
+.lookup spell Shrine of Two Moons
+```
+
+Ini cara baku mencari id sebelum menulis baris `spell_target_position` baru —
+terutama untuk Teleport/Portal ke Shrine of Two Moons dan Shrine of Seven Stars,
+yang id-nya tidak muncul di tabel mana pun di dump SFDB dan karena itu belum
+dikerjakan.
+
 ### Menjalankan file pending dengan tangan
 
 `WorldDatabase.ImportPendingUpdates = 0` di `config/worldserver.overrides.conf`,
@@ -633,8 +729,8 @@ belum dipromosikan ke `sql/updates/world/`, satu-satunya cara menerapkannya ke
 DB yang sedang jalan adalah dengan tangan.
 
 Empat file Pandaria di atas sudah dipromosikan, jadi worldserver yang
-menerapkannya sendiri. Yang tersisa untuk dijalankan dengan tangan cuma
-rantai quest intronya.
+menerapkannya sendiri. Yang tersisa untuk dijalankan dengan tangan ada dua:
+rantai quest intronya dan tujuan Teleport mage.
 
 Backup dulu:
 
@@ -648,6 +744,17 @@ Lalu jalankan, dan baca laporan di keluarannya:
 docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
     < prabowow_pandaria_intro_chain.sql
 ```
+
+```bash
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < prabowow_mage_teleport_target_positions.sql
+```
+
+File Teleport itu idempotent juga — ia menghapus dan menulis ulang enam
+baris `spell_target_position` miliknya sendiri. Laporannya menandai setiap
+spell Teleport dengan `ADA` atau `HILANG`; sesudah file ini jalan tidak boleh
+ada satu pun yang `HILANG`. Efeknya terasa sesudah restart, atau langsung
+dengan `.reload spell_target_position`.
 
 File itu idempotent — ia cuma menghapus dan menulis ulang baris miliknya
 sendiri, per pasangan `(id, quest)`, jadi relasi quest SFDB untuk quest yang

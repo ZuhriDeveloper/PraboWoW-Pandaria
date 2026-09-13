@@ -272,8 +272,10 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Portal Pandaria diklik tapi pemain tidak pindah | Gejala yang sama persis dengan baris di atas, dan sebabnya juga sama. `spell_punya_tujuan` = 0 di bagian 7 audit memastikannya |
 | Portal Pandaria tenggelam separuh ke dalam tanah | Z di baris spawn SFDB persis setinggi tanah, dan `GameObject.cpp:179` memakainya apa adanya tanpa penyesuaian. Dinaikkan `@Z_LIFT` di `2026_09_12_world_00.sql` (sudah dipromosikan). Tinggi pastinya dicari di client — lihat "Menyetel tinggi portal" |
 | Portal Pandaria Orgrimmar menghadap arah yang salah | `rotation3` = 1 di baris SFDB membuat `UpdateRotationFields` (`GameObject.cpp:2192`) mengabaikan `orientation`, karena ia hanya menghitung sendiri kalau `rotation2` DAN `rotation3` dua-duanya nol. `2026_09_12_world_00.sql` menolkan keduanya. Hanya Orgrimmar yang kena — `orientation` Stormwind memang 0, jadi (0, 1) di sana kebetulan sudah benar |
-| Quest "The King's Command" / "The Art of War" diambil tapi tidak pernah bisa diserahkan | Tiga cacat sekaligus, semuanya di data: 29547 tidak punya penutup sama sekali, objective-nya tipe 0 yang cuma bisa dikredit lewat `KilledMonsterCredit`, dan kredit yang SFDB pasang menempel di NPC yang melayang di udara. Perbaikannya `prabowow_pandaria_intro_chain.sql` — lihat "Rantai quest intro Pandaria" |
-| "The Mission" / "All Aboard!" minta naik kapal yang tidak bisa dinaiki | Skyfire dan kapal Horde bukan transport di DB ini, cuma kru yang diparkir di ketinggian 358 (map 0) dan 443 (map 1). Sesudah `prabowow_pandaria_intro_chain.sql`, menerima quest-nya langsung memindahkan pemain ke titik mendarat Jade Forest — pola yang sama dengan Emissary Windsong di Hyjal |
+| Quest "The King's Command" / "The Art of War" diambil tapi tidak pernah bisa diserahkan | Tiga cacat sekaligus, semuanya di data: 29547 tidak punya penutup sama sekali, objective-nya tipe 0 yang cuma bisa dikredit lewat `KilledMonsterCredit`, dan kredit yang SFDB pasang menempel di NPC yang melayang di udara. Diperbaiki `2026_09_12_world_04.sql` — lihat "Rantai quest intro Pandaria" |
+| "Find Grand Admiral Jes-Tereth in the war room" tapi tidak ada siapa-siapa di sana | Benar, ia memang tidak ada: 55579 di SFDB cuma nama + model, npcflag 0, level 1, **tanpa satu pun baris `creature`**. `prabowow_kings_command_jes_tereth.sql` memunculkannya di samping Rell Nightwind dan memindahkan penutup 29547 ke dia — lihat "Jes-Tereth dan 'The King's Command'" |
+| "The Mission" / "All Aboard!" minta naik kapal yang tidak bisa dinaiki | Skyfire dan kapal Horde bukan transport di DB ini, cuma kru yang diparkir di ketinggian 358 (map 0) dan 443 (map 1). Sesudah `2026_09_12_world_04.sql`, menerima quest-nya langsung memindahkan pemain ke titik mendarat Jade Forest — pola yang sama dengan Emissary Windsong di Hyjal |
+| Mau bikin quest langsung selesai begitu diterima | Jangan setel `quest_template`.`Method` = 0. Jalur autocomplete di `CanCompleteQuest` (`PlayerQuestState.cpp:297`) dijaga `CanTakeQuest`, yang lewat `SatisfyQuestStatus` (`:1143`) sudah `false` begitu quest-nya masuk log — dan `AddQuest` menyetel status INCOMPLETE (`:512`) sebelum memanggilnya (`:559`). Yang bekerja: **hapus baris `quest_objective`-nya**. Tanpa objective, loop-nya tidak punya apa pun untuk digagalkan. Quest 31853 "All Aboard!" memang begitu dari sananya |
 | Quest "Unleash Hell" / "Paint it Red!" mentok di Jade Forest | Memang belum bisa selesai dan bukan bug baru: objective-nya bunny kredit tanpa spawn plus mob di phase 1740 yang tidak bisa dimasuki pemain. Tidak ada satu quest pun yang menjadikannya PrevQuestId, jadi questline Jade Forest tetap terbuka — tinggalkan saja di log |
 | Mob Pandaria terlalu tebal / lama dibunuh | `2026_09_11_world_01.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
 | Mob Pandaria tidak menjatuhkan apa pun | Jangan langsung menyalin solusi zona Cataclysm. Pandaria konten asli SFDB, bukan hasil port, jadi lootnya bisa saja utuh. Ukur dulu dengan `audit_pandaria_loot.sql` bagian 1 |
@@ -323,7 +325,7 @@ kondisi Mount Hyjal sebelum diport, dan artinya zona itu perlu port spawn.
 | 82-83 | Deepholm | Diport |
 | 83-84 | Uldum | Diport |
 | 84-85 | Twilight Highlands | Diport |
-| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest, portal ibu kotanya diperbaiki (`2026_09_11_world_00.sql` + `2026_09_12_world_00.sql`), dan rantai quest intronya bisa diselesaikan sampai pemain berdiri di Pandaria (`prabowow_pandaria_intro_chain.sql`, masih pending). Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
+| 85-90 | Pandaria | Quest intronya kini dipasang di papan tugas (`prabowow_pandaria_intro_board_and_travel.sql`) plus tumpangan ke Jade Forest, portal ibu kotanya diperbaiki (`2026_09_11_world_00.sql` + `2026_09_12_world_00.sql`), dan rantai quest intronya bisa diselesaikan sampai pemain berdiri di Pandaria (`2026_09_12_world_04.sql`, plus `prabowow_kings_command_jes_tereth.sql` yang masih pending). Kelengkapan spawn **sudah diukur** dan zonanya berisi — lihat "Hasil ukur Pandaria" di bawah |
 
 **Drop mob zona hasil port.** File perbaikannya masih ada di
 `sql/pending_updates/world/`, dan `WorldDatabase.ImportPendingUpdates = 0` di
@@ -394,7 +396,7 @@ SFDB. Konfirmasi ke DB hidup dulu sebelum menyimpulkan apa pun.
 
 ### Portal, HP, dan loot Pandaria
 
-Empat perubahan yang berdiri sendiri. Keempatnya **sudah dipromosikan** ke
+Lima perubahan yang berdiri sendiri. Kelimanya **sudah dipromosikan** ke
 `sql/updates/world/` dan sudah jalan sendiri saat worldserver naik:
 
 | Dulu, saat masih pending | Sekarang, sesudah dipromosikan |
@@ -403,6 +405,7 @@ Empat perubahan yang berdiri sendiri. Keempatnya **sudah dipromosikan** ke
 | `prabowow_pandaria_mob_health.sql` | `2026_09_11_world_01.sql` |
 | `prabowow_pandaria_mob_loot_and_gold.sql` | `2026_09_11_world_02.sql` |
 | `prabowow_pandaria_city_portal_geometry.sql` | `2026_09_12_world_00.sql` |
+| `prabowow_pandaria_intro_chain.sql` | `2026_09_12_world_04.sql` |
 
 ⚠️ **File yang sudah dipromosikan tidak boleh diubah lagi.** Hash isinya
 tercatat di `skyfire_db_updates`, dan `WorldDatabase.AllowUpdateHashMismatch = 0`
@@ -410,10 +413,10 @@ di `config/worldserver.overrides.conf` membuat ketidakcocokan itu **fatal** —
 worldserver berhenti di `was already applied with a different hash` dan tidak
 pernah naik. Perbaikan susulan selalu masuk ke file pending BARU.
 
-Perbaikan geometri portal ikut menyusul: `2026_09_12_world_00.sql`. Yang masih
-pending dari rangkaian ini tinggal satu, `prabowow_pandaria_intro_chain.sql` — rantai quest
-intronya, di bawah. Karena `WorldDatabase.ImportPendingUpdates = 0`, ia tidak
-jalan sendiri — lihat "Menjalankan file pending dengan tangan" di bawah.
+Yang masih pending dari rangkaian ini tinggal satu,
+`prabowow_kings_command_jes_tereth.sql` — susulan untuk rantai quest intronya,
+di bawah. Karena `WorldDatabase.ImportPendingUpdates = 0`, ia tidak jalan
+sendiri — lihat "Menjalankan file pending dengan tangan" di bawah.
 
 **Portal ke Jade Forest** (`2026_09_11_world_00.sql`). Portalnya tidak
 pernah hilang: SFDB sudah memasang keduanya sejak rilis 10_to_11, dan keduanya
@@ -544,9 +547,13 @@ yang rusak. Laporan di bagian 7 file itu yang memberi tahu mana yang terjadi.
 
 ### Rantai quest intro Pandaria
 
-`prabowow_pandaria_intro_chain.sql`, masih pending. Quest intronya sudah sampai
+`2026_09_12_world_04.sql` (sudah dipromosikan). Quest intronya sudah sampai
 ke papan tugas sejak `2026_09_10_world_01.sql`, tapi rantai di belakangnya tidak
 jalan: quest diambil, lalu berhenti di situ selamanya.
+
+⚠️ Sisi Alliance-nya disusul `prabowow_kings_command_jes_tereth.sql` — penutup
+29547 pindah dari Rell Nightwind ke Grand Admiral Jes-Tereth, dan quest-nya
+selesai begitu diterima. Baca dua bagian ini berurutan; yang di bawah menang.
 
 | | Alliance | Horde |
 |---|---|---|
@@ -626,6 +633,72 @@ Tidak ada yang hilang karena berhenti di sini: **tidak ada satu quest pun di
 seluruh DB yang menjadikan rantai ini `PrevQuestId`**, dan 136 dari 150 quest
 Jade Forest punya pemberi yang tidak di-phase. Questline zonanya terbuka penuh
 tanpa rantai intro ini.
+
+### Jes-Tereth dan "The King's Command"
+
+`prabowow_kings_command_jes_tereth.sql`, masih pending. Susulan untuk sisi
+Alliance-nya, karena perbaikan di atas menambal mekanismenya tapi salah orang.
+
+Teks quest-nya sendiri yang jadi buktinya, dibaca dari dump SFDB:
+
+| Kolom | Isi |
+|-------|-----|
+| `Objectives` | "Find Grand Admiral Jes-Tereth in the war room at Stormwind Keep in Stormwind City." |
+| `Details` | "...Please come to Stormwind Keep immediately for a briefing with King Varian Wrynn. **I will be waiting in the King's war room.**" |
+| `QuestGiverTargetName` | "Grand Admiral Jes-Tereth" |
+
+Jadi yang dicari pemain memang Jes-Tereth, bukan Rell. `2026_09_12_world_04.sql`
+menjadikan Rell penutupnya karena ia satu-satunya NPC yang benar-benar berdiri
+di war room dan sudah jadi pemberi quest berikutnya — mekanismenya jalan, tapi
+tidak ada yang memberi tahu pemain untuk menyapanya, jadi praktiknya tetap
+buntu.
+
+Sebabnya: **Jes-Tereth tidak pernah dimunculkan.** `creature_template` 55579 ada
+— nama, model 39240 — tapi `npcflag` 0, `AIName` kosong, level 1/1, dan **nol
+baris di tabel `creature`**. Ia nama dan model, tidak lebih. War room-nya
+sendiri nyaris kosong: spawn terdekat dari Rell di dump SFDB ada 13 yard
+jauhnya.
+
+Yang dilakukan file ini:
+
+1. **Objective 29547 dihapus**, jadi quest-nya selesai begitu diterima.
+2. 55579 diberi `npcflag` bit questgiver, `AIName` SmartAI, level 90, lalu
+   di-spawn 2,5 yard di sebelah Rell — posisinya diturunkan dari baris spawn
+   Rell sendiri, bukan diketik. Kalau rilis SFDB berikutnya memunculkannya
+   sendiri dalam radius 30 yard dari Rell, file ini mengalah dan tidak menambah
+   apa-apa.
+3. Penutup 29547 pindah dari Rell ke dia, dan ia ikut jadi pemberi "The
+   Mission" — Rell tetap memberi juga. Karena `NextQuestIdChain` 29547 → 29548
+   dan sekarang satu NPC memegang keduanya, serah-terima dan quest berikutnya
+   terjadi dalam satu jendela, lalu teleport ke Jade Forest yang sama.
+
+**Kenapa objective-nya dihapus, bukan `Method` disetel 0.** `Method` = 0 itu
+jebakan yang kelihatan benar: `Quest::IsAutoComplete()` memang persis
+`Method == 0` (`QuestDef.cpp:199`), dan `CanCompleteQuest` punya jalan pintas
+untuknya di `PlayerQuestState.cpp:297`. Jalan pintas itu dijaga
+`CanTakeQuest(qInfo, false)`, dan `CanTakeQuest` (`:249`) menjalankan
+`SatisfyQuestStatus` (`:1143`) yang mengembalikan `false` begitu quest-nya ada
+di log dengan status apa pun. `AddQuest` menyetel status INCOMPLETE (`:512`)
+sebelum sampai ke `if (CanCompleteQuest(questId)) CompleteQuest(questId)`
+(`:559`) — jadi saat dipanggil, pintasnya sudah tertutup dan yang menentukan
+tinggal loop objective. Tanpa baris objective, loop itu tidak punya apa pun
+untuk digagalkan: `true`, dan quest-nya selesai di detik yang sama ia diterima.
+Bukan akal-akalan — quest 31853 "All Aboard!" aslinya memang tanpa objective
+dan berperilaku begitu.
+
+Baris yang dihapus bisa dikembalikan; di dump SFDB ia
+`(259891, 0, 0, 55567, 1, 0, 'Stormwind Keep visited')`. Kill credit 55567 itu
+sendiri tidak punya spawn dan tidak dipanggil script mana pun di seluruh DB —
+itulah kenapa ia tidak pernah bisa didapat.
+
+**Pemain yang terlanjur memegang quest-nya** tidak ikut selesai hanya karena
+objective-nya hilang — tidak ada yang menjalankan ulang `CanCompleteQuest`
+untuknya. Karena itu Jes-Tereth memanggil
+`SMART_ACTION_CALL_AREAEXPLOREDOREVENTHAPPENS` (15) saat disapa, yang berakhir
+di `if (CanCompleteQuest) CompleteQuest` (`PlayerQuestState.cpp:1722`). Jadi
+cukup datangi dia. Baris sisa di `character_queststatus_objectives` mereka
+dilewati saat load (`Player.cpp:13809` — id objective-nya tidak lagi menunjuk
+ke quest mana pun), bukan error.
 
 ### Teleport mage dan Roll monk
 
@@ -728,9 +801,9 @@ jadi isi `sql/pending_updates/world/` **tidak pernah** jalan sendiri. Selama
 belum dipromosikan ke `sql/updates/world/`, satu-satunya cara menerapkannya ke
 DB yang sedang jalan adalah dengan tangan.
 
-Empat file Pandaria di atas sudah dipromosikan, jadi worldserver yang
+Lima file Pandaria di atas sudah dipromosikan, jadi worldserver yang
 menerapkannya sendiri. Yang tersisa untuk dijalankan dengan tangan ada dua:
-rantai quest intronya dan tujuan Teleport mage.
+Jes-Tereth dan tujuan Teleport mage.
 
 Backup dulu:
 
@@ -742,7 +815,7 @@ Lalu jalankan, dan baca laporan di keluarannya:
 
 ```bash
 docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
-    < prabowow_pandaria_intro_chain.sql
+    < prabowow_kings_command_jes_tereth.sql
 ```
 
 ```bash
@@ -750,25 +823,28 @@ docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
     < prabowow_mage_teleport_target_positions.sql
 ```
 
-File Teleport itu idempotent juga — ia menghapus dan menulis ulang enam
+File Teleport itu idempotent — ia menghapus dan menulis ulang enam
 baris `spell_target_position` miliknya sendiri. Laporannya menandai setiap
 spell Teleport dengan `ADA` atau `HILANG`; sesudah file ini jalan tidak boleh
 ada satu pun yang `HILANG`. Efeknya terasa sesudah restart, atau langsung
 dengan `.reload spell_target_position`.
 
-File itu idempotent — ia cuma menghapus dan menulis ulang baris miliknya
-sendiri, per pasangan `(id, quest)`, jadi relasi quest SFDB untuk quest yang
-sama ikut selamat dan ketiga baris `smart_scripts` milik Sky Admiral Rogers
-tidak tersentuh. Sesudahnya world perlu restart, karena `AIName` baru dibaca
-saat creature-nya dibuat:
+File Jes-Tereth idempotent juga — aman diulang, dan spawn-nya dilewati kalau
+sudah ada Jes-Tereth lain dalam radius 30 yard dari Rell. Di laporannya:
+`objectives` untuk 29547 harus 0, 29547 harus punya tepat satu `enders`, 29548
+dua `givers`, dan baris Jes-Tereth harus `ai` = SmartAI dengan `spawns` ≥ 1.
+Kalau `spawns` 0, ia masih belum ada di dunia dan quest-nya tetap tidak bisa
+diserahkan. Sesudahnya world perlu restart, karena `AIName` baru dibaca saat
+creature-nya dibuat:
 
 ```bash
 docker compose $PW restart world
 ```
 
 Tanpa restart, `.reload creature_questender`, `.reload creature_queststarter`
-dan `.reload smart_scripts` sudah memasang relasi dan script-nya, tapi keempat
-NPC itu tetap tanpa AI sampai mereka dibuat ulang.
+dan `.reload smart_scripts` sudah memasang relasi dan script-nya, tapi NPC-nya
+tetap tanpa AI sampai dibuat ulang — dan spawn baru memang cuma muncul setelah
+`creature` dibaca ulang.
 
 Portal langsung terasa sesudah restart. HP baru terasa pada mob yang respawn.
 

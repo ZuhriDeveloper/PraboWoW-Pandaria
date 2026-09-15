@@ -279,6 +279,7 @@ level naik, dan posisi mereka pindah ke ibu kota.
 | Quest "Unleash Hell" / "Paint it Red!" mentok di Jade Forest | Memang belum bisa selesai dan bukan bug baru: objective-nya bunny kredit tanpa spawn plus mob di phase 1740 yang tidak bisa dimasuki pemain. Tidak ada satu quest pun yang menjadikannya PrevQuestId, jadi questline Jade Forest tetap terbuka — tinggalkan saja di log |
 | Mob Pandaria terlalu tebal / lama dibunuh | `2026_09_11_world_01.sql` menurunkan `Health_mod` map 870 jadi 30%. Rate di config tidak bisa dipakai — ia berlaku untuk seluruh realm, tanpa varian per-map |
 | Mob Pandaria tidak menjatuhkan apa pun | Jangan langsung menyalin solusi zona Cataclysm. Pandaria konten asli SFDB, bukan hasil port, jadi lootnya bisa saja utuh. Ukur dulu dengan `audit_pandaria_loot.sql` bagian 1 |
+| Tidak bisa belajar Wisdom of the Four Winds di pelatih Pandaria | Jendela pelatihnya memang kosong sama sekali: Skydancer Shun (60167) dan Cloudrunner Leng (60166) tidak punya satu pun baris `npc_trainer`, jadi `SendTrainerList` (`NPCHandler.cpp:125`) keluar tanpa mengirim SMSG_TRAINER_LIST. 115913 juga tidak ada di blok referensi mana pun. Diperbaiki `prabowow_pandaria_flying_trainers.sql` — lihat "Pelatih terbang Pandaria" |
 | Teleport mage cast-nya jalan tapi pemain tidak pindah | Baris `spell_target_position` untuk spell itu tidak ada di dump SFDB, dan `Spell.cpp:1400-1416` diam-diam memakai posisi pemain sendiri sebagai tujuan. Enam tujuan yang hilang diisi `prabowow_mage_teleport_target_positions.sql` — lihat "Teleport mage dan Roll monk" |
 | Roll monk tidak menggerakkan karakter | Bukan data: `spell_monk_roll` memang tidak pernah memanggil API gerak apa pun, seluruh geraknya diserahkan ke efek DBC yang core ini tidak proses. Perbaikannya di C++, jadi butuh build CI dan deploy image baru |
 
@@ -778,6 +779,68 @@ kemungkinan besar rusak dengan cara yang sama, tapi sengaja belum ikut — dafta
 spell yang sudah bisa bergerak sendiri akan membuat pemainnya terlempar dua kali.
 Uji dulu di game, baru tambahkan.
 
+### Pelatih terbang Pandaria
+
+`prabowow_pandaria_flying_trainers.sql`, masih pending. Level 90 berdiri di
+depan pelatih terbang di Shrine of Two Moons atau Shrine of Seven Stars dan
+tidak bisa belajar Wisdom of the Four Winds — spell yang menyalakan terbang di
+Pandaria. Bukan cuma spell itu yang hilang: jendelanya kosong sama sekali.
+
+Sebabnya bukan NPC-nya. Skydancer Shun (60167) berdiri di 1555.22 890.88 478.43
+dan Cloudrunner Leng (60166) di 911.60 349.37 510.97, dua-duanya map 870 tanpa
+phase, faction 2481, `npcflag` 80 — UNIT_NPC_FLAG_TRAINER (0x10) plus
+UNIT_NPC_FLAG_TRAINER_PROFESSION (0x40), pasangan yang sama dengan semua pelatih
+tunggangan lain di dump. Yang tidak ada itu **barisnya di `npc_trainer`**: nol,
+bukan kurang. `SendTrainerList` (`NPCHandler.cpp:125`) tidak menemukan data
+spell untuk entry itu, menulis "Training spells not found for creature" (`:128`),
+lalu keluar tanpa mengirim SMSG_TRAINER_LIST.
+
+22 pelatih tunggangan lain di dump tidak menuliskan spell-nya satu per satu;
+mereka menunjuk blok referensi — `npc_trainer`.`spell` = -200300 (darat) atau
+-200301 (darat + terbang). `ObjectMgr::LoadTrainerSpell` (`:8109`) membuka blok
+itu lewat `INNER JOIN npc_trainer AS b ON a.entry = -(b.spell)`, dan
+`AddSpellToTrainer` (`:8026`) menolak menjadikan blok itu sendiri sebagai
+pelatih karena entry-nya ≥ SKYFIRE_TRAINER_START_REF (200000). Dua pelatih
+Pandaria ini memang tidak pernah ditautkan ke blok mana pun.
+
+115913 sendiri juga tidak ada di blok mana pun. Di seluruh dump ia tidak muncul
+sekali pun di `npc_trainer`, jadi tidak ada satu pelatih pun di realm ini yang
+bisa mengajarkannya.
+
+Yang perlu dipahami: memberi pemain spell itu **sudah cukup**. Tidak ada gerbang
+lain di core. `Player::IsKnowHowFlyIn` (`Player.cpp:21305`) cuma mengurus map
+571, Northrend. Naik tunggangan lewat `Unit::GetMountCapability`
+(`Unit.cpp:3830`), yang melewatkan baris MountCapability.dbc mana pun yang
+`RequiredSpell`-nya belum dimiliki pemain (`:3879`) — dan baris terbang Pandaria
+menyebut 115913. Itu juga sebabnya character boost core ini menulis persis spell
+itu ke `character_spell` (`CharacterBoost.h:549`). Tidak ada perubahan C++ di
+sini, jadi tidak perlu build CI.
+
+Masing-masing pelatih dapat dua baris: referensi -200301 (tangga lengkap
+Apprentice sampai Master Riding, plus Flight Master's License dan Cold Weather
+Flying — daftar yang sama yang dibagikan Roxi Ramrocket dan Hira Snowdawn), dan
+satu baris langsung untuk 115913 seharga 2500g, level 90, skill riding (762)
+nilai 225. Angka 225 itu Expert Riding, batas yang sama yang dipakai blok 200301
+untuk Cold Weather Flying (54198) dan Flight Master's License (90269) — dua
+pembuka terbang per-benua lainnya.
+
+115913 ditaruh di NPC-nya, bukan di dalam blok 200301, supaya 20 pelatih yang
+ikut blok itu tidak ikut berubah. Kalau nanti terbang Pandaria memang boleh
+dilatih dari Azeroth juga, memindahkannya ke dalam blok cuma satu baris.
+
+Ia juga ditulis apa adanya, bukan lewat spell "pengajar". Isi blok 200301 semua
+pembungkus sisi-caster — 33389 mengajarkan 33388, 34092 mengajarkan 34090, 90266
+mengajarkan 90265 — tapi pembungkus untuk 115913 tidak ada di data ini, dan
+memang tidak perlu: `AddSpellToTrainer` menyetel `learnedSpell[0]` ke spell itu
+sendiri kalau ia tidak punya SPELL_EFFECT_LEARN_SPELL (`:8074`), lalu
+`HandleTrainerBuySpellOpcode` memanggil `Player::learnSpell` untuknya
+(`NPCHandler.cpp:278`).
+
+Dua pelatih pandaren di ibu kota sengaja tidak disentuh — mereka tidak berdiri
+di Pandaria dan bukan yang dilaporkan, jadi perbaikannya file lain: Softpaws
+(70301, Orgrimmar) cuma mengajar Apprentice dan Journeyman, dan Mei Lin (70296,
+Stormwind) `npcflag`-nya 0, jadi dia bahkan bukan pelatih.
+
 ### Mencari id spell dari DBC
 
 Berulang kali mentok di hal yang sama: `effIndex`, nama, dan id spell ada di
@@ -802,8 +865,8 @@ belum dipromosikan ke `sql/updates/world/`, satu-satunya cara menerapkannya ke
 DB yang sedang jalan adalah dengan tangan.
 
 Lima file Pandaria di atas sudah dipromosikan, jadi worldserver yang
-menerapkannya sendiri. Yang tersisa untuk dijalankan dengan tangan ada dua:
-Jes-Tereth dan tujuan Teleport mage.
+menerapkannya sendiri. Yang tersisa untuk dijalankan dengan tangan ada tiga:
+Jes-Tereth, tujuan Teleport mage, dan pelatih terbang Pandaria.
 
 Backup dulu:
 
@@ -822,6 +885,20 @@ docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
 docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
     < prabowow_mage_teleport_target_positions.sql
 ```
+
+```bash
+docker compose $PW exec -T db mysql -uroot -p"$DB_ROOT_PASSWORD" world \
+    < prabowow_pandaria_flying_trainers.sql
+```
+
+File pelatih terbang idempotent — ia menghapus lalu menulis ulang empat barisnya
+sendiri di `npc_trainer`. Di laporannya, kedua pelatih harus punya
+`spells_via_ref` = 7 dan `spells_direct` = 1, dan tabel kedua harus memuat 115913
+sekali untuk masing-masing, di `spellcost` 25000000 dengan `reqlevel` 90. Kalau
+`spells_via_ref` 0, blok referensi 200301 tidak ada di DB itu dan tangga riding
+biasanya ikut hilang — baris 115913-nya tetap jalan. Efeknya terasa sesudah
+`.reload npc_trainer` atau restart world; tidak perlu image baru, tidak ada
+perubahan C++ di sini.
 
 File Teleport itu idempotent — ia menghapus dan menulis ulang enam
 baris `spell_target_position` miliknya sendiri. Laporannya menandai setiap
